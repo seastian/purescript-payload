@@ -6,9 +6,7 @@ module Payload.Server.Handlers
 
 import Prelude
 
-import Control.Monad.Except (lift, throwError)
 import Data.Array as Array
-import Data.Bifunctor (lmap)
 import Data.Either (Either(..))
 import Data.Foldable (class Foldable)
 import Data.Int as Int
@@ -18,20 +16,16 @@ import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Aff as Aff
 import Effect.Class (liftEffect)
-import Foreign (readString)
 import Node.FS.Aff as FsAff
 import Node.FS.Stats as Stats
 import Node.FS.Stream (createReadStream)
 import Node.Stream (Read, Stream)
 import Payload.Headers as Headers
-import Payload.ResponseTypes (Failure(..), Response(..), ResponseBody(..), Result, RawResponse)
+import Payload.ResponseTypes (Failure(..), Response(..), ResponseBody(..))
 import Payload.Server.Internal.MimeTypes as MimeTypes
 import Payload.Server.Path as Path
-import Payload.Server.Response (class EncodeResponse)
 import Payload.Server.Response as Response
 import Payload.Server.Status as Status
-import Simple.JSON (class ReadForeign)
-import Unsafe.Coerce (unsafeCoerce)
 
 -- | Handler for returning a file at the given path.
 -- | Attempts to return an appropriate MIME type, defaulting
@@ -54,7 +48,7 @@ file path = do
     _ -> pure (Left notFoundError)
 
 fileSize :: Stats.Stats -> Int
-fileSize (Stats.Stats statsObj) = Int.round statsObj.size
+fileSize statsObj = Int.round $ Stats.size statsObj
 
 -- | Handler for returning static files from a directory.
 -- | Protects against directory traversal attacks.

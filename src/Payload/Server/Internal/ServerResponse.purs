@@ -35,8 +35,8 @@ sendResponse res rawResp = Aff.runAff_ onComplete do
 
 writeResponse :: HTTP.ServerResponse -> RawResponse -> Effect Unit
 writeResponse res (Response serverRes) = do
-  setStatusCode res serverRes.status.code
-  setStatusMessage res serverRes.status.reason
+  setStatusCode serverRes.status.code res
+  setStatusMessage serverRes.status.reason res
   writeBodyAndHeaders res serverRes.headers serverRes.body
 
 writeBodyAndHeaders :: HTTP.ServerResponse -> Headers -> ResponseBody -> Effect Unit
@@ -61,7 +61,7 @@ endResponse res = Aff.makeAff \cb -> do
 
 writeHeaders :: HTTP.ServerResponse -> Headers -> Effect Unit
 writeHeaders res headers = do
-  let (sets :: Array (Effect Unit)) = map (\(Tuple k v) -> setHeader res k v) (Headers.toUnfoldable headers)
+  let (sets :: Array (Effect Unit)) = map (\(Tuple k v) -> setHeader k v $ toOutgoingMessage res) (Headers.toUnfoldable headers)
   sequence_ sets
 
 writeStringBody :: HTTP.ServerResponse -> String -> Effect Unit

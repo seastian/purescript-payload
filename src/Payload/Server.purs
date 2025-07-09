@@ -27,7 +27,13 @@ import Effect.Aff as Aff
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (Error)
+import Node.EventEmitter (on)
 import Node.HTTP as HTTP
+import Node.HTTP.IncomingMessage as HTTP.IncomingMessage
+import Node.HTTP.Server as HTTP.Server
+import Node.HTTP.Types as HTTP.Types
+import Node.Net.Server (listenTcp)
+import Node.Net.Server as NetServer
 import Node.URL (URL)
 import Node.URL as Url
 import Payload.Internal.UrlParsing (Segment)
@@ -75,7 +81,7 @@ defaultOpts =
   , port: 3000
   , logLevel: LogNormal }
 
-newtype Server = Server HTTP.Server
+newtype Server = Server HTTP.Types.HttpServer
 
 type Config =
   { logger :: Logger }
@@ -137,17 +143,12 @@ startGuarded opts apiSpec api = do
   let cfg = mkConfig opts
   case mkRouter apiSpec api of
     Right routerTrie -> do
-      server <- Server <$> (liftEffect $ HTTP.createServer (handleRequest cfg routerTrie))
-      let httpOpts = Record.delete (Proxy :: Proxy "logLevel") opts
-      listenResult <- listen cfg server httpOpts
+      server@(Server httpServer) <- Server <$> (liftEffect $ HTTP.createServer)
+      -- server <- Server <$> (liftEffect $ HTTP.createServer (handleRequest cfg routerTrie))
+      void $ liftEffect $ httpServer # on HTTP.Server.requestH (handleRequest cfg routerTrie)
+      listenResult <- listen cfg server opts
       pure (const server <$> listenResult)
     Left err -> pure (Left err)
-
-dumpRoutes :: Trie HandlerEntry -> Effect Unit
-dumpRoutes = log <<< showRoutes
-
-showRoutes :: Trie HandlerEntry -> String
-showRoutes routerTrie = Trie.dumpEntries (_.route <$> routerTrie)
 
 mkConfig :: Options -> Config
 mkConfig { logLevel } = { logger: mkLogger logLevel }
@@ -167,17 +168,17 @@ mkLogger logLevel = { log: log_, logDebug, logError }
     logError | logLevel >= LogError = log
     logError = const $ pure unit
 
-handleRequest :: Config -> Trie HandlerEntry -> HTTP.Request -> HTTP.Response -> Effect Unit
+handleRequest :: Config -> Trie HandlerEntry -> HTTP.Types.IncomingMessage HTTP.Types.IMServer -> HTTP.Types.ServerResponse -> Effect Unit
 handleRequest cfg@{ logger } routerTrie req res = do
-  let url = Url.parse (HTTP.requestURL req)
-  logger.logDebug (HTTP.requestMethod req <> " " <> show (url.path))
+  let url = HTTP.IncomingMessage.url req
+  logger.logDebug (HTTP.IncomingMessage.method req <> " " <> show url)
   case requestUrl req of
     Right reqUrl -> runHandlers cfg routerTrie reqUrl req res
     Left err -> do
       writeResponse res (internalError $ StringBody $ "Path could not be decoded: " <> show err)
 
 runHandlers :: Config -> Trie HandlerEntry -> RequestUrl
-               -> HTTP.Request -> HTTP.Response -> Effect Unit
+               -> HTTP.Types.IncomingMessage HTTP.Types.IMServer -> HTTP.Types.ServerResponse -> Effect Unit
 runHandlers { logger } routerTrie reqUrl req res = do
   let (matches :: List HandlerEntry) = Trie.lookup (reqUrl.method : reqUrl.path) routerTrie
   let matchesStr = String.joinWith "\n" (Array.fromFoldable $ (showRouteUrl <<< _.route) <$> matches)
@@ -204,43 +205,30 @@ runHandlers { logger } routerTrie reqUrl req res = do
       pure (Forward "No match could handle")
     handleNext _ Nil = pure (Forward "No match could handle")
 
-showMatches :: List HandlerEntry -> String
-showMatches matches = "    " <> String.joinWith "\n    " (Array.fromFoldable $ showMatch <$> matches)
-  where
-    showMatch = showRouteUrl <<< _.route
-
 showUrl :: RequestUrl -> String
-showUrl { method, path, query } = method <> " " <> fullPath
+showUrl { method, path } = method <> " " <> fullPath
   where fullPath = String.joinWith "/" (Array.fromFoldable path)
 
 showRouteUrl :: List Segment -> String
 showRouteUrl (method : rest) = show method <> " /" <> String.joinWith "/" (Array.fromFoldable $ show <$> rest)
 showRouteUrl Nil = ""
   
-requestUrl :: HTTP.Request -> Either String RequestUrl
-requestUrl req = do
-  let parsedUrl = Url.parse (HTTP.requestURL req)
-  path <- urlPath parsedUrl
-  let query = fromMaybe "" $ toMaybe parsedUrl.query
-  let pathSegments = urlToSegments path
-  pure { method, path: pathSegments, query }
-  where
-    method = HTTP.requestMethod req
+requestUrl :: HTTP.Types.IncomingMessage HTTP.Types.IMServer -> Either String RequestUrl
+requestUrl req = Left "asdfas"  -- do
+  -- parsedUrl <- Url.new' $ HTTP.IncomingMessage.url req
+  -- path <- urlPath parsedUrl
+  -- let query = fromMaybe "" $ toMaybe parsedUrl.query
+  -- let pathSegments = urlToSegments path
+  -- pure { method, path: pathSegments, query }
+  -- where
+  --   method = HTTP.IncomingMessage.method req
 
-urlPath :: URL -> Either String String
-urlPath url = url.pathname
-  # toMaybe
-  # maybe (Left "No path") Right
+foreign import onError :: HTTP.Types.HttpServer -> (Error -> Effect Unit) -> Effect Unit
 
-urlQuery :: URL -> Maybe String
-urlQuery url = url.query # toMaybe
-
-foreign import onError :: HTTP.Server -> (Error -> Effect Unit) -> Effect Unit
-
-listen :: Config -> Server -> HTTP.ListenOptions -> Aff (Either String Unit)
+listen :: Config -> Server -> Options -> Aff (Either String Unit)
 listen { logger } server@(Server httpServer) opts = Aff.makeAff $ \cb -> do
   onError httpServer \error -> cb (Right (Left (show error)))
-  HTTP.listen httpServer opts (logger.log startedMsg *> cb (Right (Right unit)))
+  -- HTTP.listen httpServer opts (logger.log startedMsg *> cb (Right (Right unit)))
   pure $ Aff.Canceler (\error -> liftEffect (logger.logError (errorMsg error)) *> close server)
   where
     startedMsg = "Server is running on http://" <> opts.hostname <> ":" <> show opts.port
@@ -248,12 +236,8 @@ listen { logger } server@(Server httpServer) opts = Aff.makeAff $ \cb -> do
 
 -- | Stops the server from accepting new connections and closes all connections connected to this server which are not sending a request or waiting for a response.
 close :: Server -> Aff Unit
-close (Server server) = Aff.makeAff $ \cb -> do
-  HTTP.close server (cb (Right unit))
-  pure Aff.nonCanceler
-
-foreign import closeAllConnectionsImpl :: HTTP.Server -> Effect Unit
+close (Server server) = liftEffect $ NetServer.close $ HTTP.Server.toNetServer server
 
 -- | Closes all connections connected to this server.
 closeAllConnections :: Server -> Effect Unit
-closeAllConnections (Server server) = closeAllConnectionsImpl server
+closeAllConnections (Server server) = HTTP.Server.closeAllConnections server
