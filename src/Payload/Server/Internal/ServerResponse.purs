@@ -12,7 +12,10 @@ import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Node.Encoding (Encoding(..))
 import Node.Encoding as Encoding
-import Node.HTTP as HTTP
+import Node.HTTP.OutgoingMessage (setHeader, toWriteable)
+import Node.HTTP.ServerResponse (setStatusCode, setStatusMessage, toOutgoingMessage)
+
+import Node.HTTP.Types as HTTP
 import Node.Stream as Stream
 import Payload.Headers (Headers)
 import Payload.Headers as Headers
@@ -21,7 +24,7 @@ import Payload.Server.Response (internalError)
 import Type.Equality (to)
 import Unsafe.Coerce (unsafeCoerce)
 
-sendResponse :: HTTP.Response -> RawResponse -> Effect Unit
+sendResponse :: HTTP.ServerResponse -> RawResponse -> Effect Unit
 sendResponse res rawResp = Aff.runAff_ onComplete do
   liftEffect (writeResponse res rawResp)
   where
@@ -31,13 +34,13 @@ sendResponse res rawResp = Aff.runAff_ onComplete do
       writeResponse res (internalError (StringBody "Error sending server response"))
     onComplete (Right _) = pure unit
 
-writeResponse :: HTTP.Response -> RawResponse -> Effect Unit
+writeResponse :: HTTP.ServerResponse -> RawResponse -> Effect Unit
 writeResponse res (Response serverRes) = do
-  HTTP.setStatusCode res serverRes.status.code
-  HTTP.setStatusMessage res serverRes.status.reason
+  setStatusCode res serverRes.status.code
+  setStatusMessage res serverRes.status.reason
   writeBodyAndHeaders res serverRes.headers serverRes.body
 
-writeBodyAndHeaders :: HTTP.Response -> Headers -> ResponseBody -> Effect Unit
+writeBodyAndHeaders :: HTTP.ServerResponse -> Headers -> ResponseBody -> Effect Unit
 writeBodyAndHeaders res headers (StringBody str) = do
   let contentLength = show $ Encoding.byteLength str UTF8
   let newHeaders = Headers.setIfNotDefined "content-length" contentLength headers
@@ -50,27 +53,27 @@ writeBodyAndHeaders res headers EmptyBody = do
   writeHeaders res headers
   Aff.launchAff_ $ endResponse res
 
-foreign import endResponse_ :: HTTP.Response -> Unit -> (Unit -> Effect Unit) -> Effect Unit
+foreign import endResponse_ :: HTTP.ServerResponse -> Unit -> (Unit -> Effect Unit) -> Effect Unit
 
-endResponse :: HTTP.Response -> Aff Unit
+endResponse :: HTTP.ServerResponse -> Aff Unit
 endResponse res = Aff.makeAff \cb -> do
   endResponse_ res unit (\_ -> cb (Right unit))
   pure Aff.nonCanceler
 
-writeHeaders :: HTTP.Response -> Headers -> Effect Unit
+writeHeaders :: HTTP.ServerResponse -> Headers -> Effect Unit
 writeHeaders res headers = do
-  let (sets :: Array (Effect Unit)) = map (\(Tuple k v) -> HTTP.setHeader res k v) (Headers.toUnfoldable headers)
+  let (sets :: Array (Effect Unit)) = map (\(Tuple k v) -> setHeader res k v) (Headers.toUnfoldable headers)
   sequence_ sets
 
-writeStringBody :: HTTP.Response -> String -> Effect Unit
+writeStringBody :: HTTP.ServerResponse -> String -> Effect Unit
 writeStringBody res str = do
-  let out = HTTP.responseAsStream res
+  let out = toWriteable $ toOutgoingMessage res
   -- Ignoring errors
-  _ <- Stream.writeString out UTF8 str (\_ -> pure unit)
+  _ <- Stream.writeString' out UTF8 str (\_ -> pure unit)
   -- Ignoring errors
-  Stream.end out (\_ -> pure unit)
+  Stream.end' out (\_ -> pure unit)
 
-writeStreamBody :: HTTP.Response -> UnsafeStream -> Effect Unit
+writeStreamBody :: HTTP.ServerResponse -> UnsafeStream -> Effect Unit
 writeStreamBody res stream = do
-  _ <- Stream.pipe (to (unsafeCoerce stream)) (HTTP.responseAsStream res)
+  _ <- Stream.pipe (to (unsafeCoerce stream)) (toWriteable $ toOutgoingMessage res)
   pure unit
