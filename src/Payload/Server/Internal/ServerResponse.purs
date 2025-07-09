@@ -14,7 +14,6 @@ import Node.Encoding (Encoding(..))
 import Node.Encoding as Encoding
 import Node.HTTP.OutgoingMessage (setHeader, toWriteable)
 import Node.HTTP.ServerResponse (setStatusCode, setStatusMessage, toOutgoingMessage)
-
 import Node.HTTP.Types as HTTP
 import Node.Stream as Stream
 import Payload.Headers (Headers)
