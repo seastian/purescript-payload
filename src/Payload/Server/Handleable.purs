@@ -38,7 +38,7 @@ import Prim.Symbol as Symbol
 import Type.Equality (class TypeEquals, to)
 import Type.Proxy (Proxy(..))
 
-type MethodHandler = RequestUrl -> HTTP.Request -> HTTP.Response -> Result RawResponse
+type MethodHandler = RequestUrl -> HTTP.Request -> Result RawResponse
 
 class Handleable
   route
@@ -57,7 +57,6 @@ class Handleable
             -> guards
             -> RequestUrl
             -> HTTP.Request
-            -> HTTP.Response
             -> Result RawResponse
 
 instance handleablePostRoute ::
@@ -99,7 +98,7 @@ instance handleablePostRoute ::
                   baseGuards
                   guardsSpec
                   (Record allGuards) where
-  handle _ _ _ _ route handler allGuards { method, path, query } req res = do
+  handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
     decodedQuery <- withExceptT badRequest $ except $ decodeQuery query
@@ -154,7 +153,7 @@ instance handleableGetRoute ::
                   baseGuards
                   guardsSpec
                   (Record allGuards) where
-  handle _ _ _ _ route handler allGuards { method, path, query } req res = do
+  handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
     decodedQuery <- withExceptT badRequest $ except $ decodeQuery query
@@ -207,7 +206,7 @@ instance handleableHeadRoute ::
                   baseGuards
                   guardsSpec
                   (Record allGuards) where
-  handle _ _ _ _ route handler allGuards { method, path, query } req res = do
+  handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
     decodedQuery <- withExceptT badRequest $ except $ decodeQuery query
@@ -263,7 +262,7 @@ instance handleablePutRoute ::
                   baseGuards
                   guardsSpec
                   (Record allGuards) where
-  handle _ _ _ _ route handler allGuards { method, path, query } req res = do
+  handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
     decodedQuery <- withExceptT badRequest $ except $ decodeQuery query
@@ -321,7 +320,7 @@ instance handleableDeleteRoute ::
                   baseGuards
                   guardsSpec
                   (Record allGuards) where
-  handle _ _ _ _ route handler allGuards { method, path, query } req res = do
+  handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
     decodedQuery <- withExceptT badRequest $ except $ decodeQuery query
@@ -376,7 +375,7 @@ instance handleableOptionsRoute ::
                   baseGuards
                   guardsSpec
                   (Record allGuards) where
-  handle _ _ _ _ route handler allGuards { method, path, query } req res = do
+  handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
     decodedQuery <- withExceptT badRequest $ except $ decodeQuery query

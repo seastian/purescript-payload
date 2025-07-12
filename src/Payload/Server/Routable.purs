@@ -46,12 +46,12 @@ import Type.Proxy (Proxy(..))
 type RoutingTrie = Trie HandlerEntry
 
 type HandlerEntry =
-  { handler :: RequestUrl -> HTTP.Request -> HTTP.Response -> Aff Outcome
+  { handler :: RequestUrl -> HTTP.Request -> Aff Outcome
   , route :: List Segment }
 
-type RawHandler = RequestUrl -> HTTP.Request -> HTTP.Response -> Aff Outcome
+type RawHandler = RequestUrl -> HTTP.Request -> Aff Outcome
 
-data Outcome = Success | Failure | Forward String
+data Outcome = Success RawResponse | Failure RawResponse | Forward String
 
 class Routable routesSpec guardsSpec handlers guards |
   routesSpec guardsSpec -> handlers,
@@ -163,15 +163,15 @@ instance routableListCons ::
       routePath = UrlParsing.asSegments (Proxy :: Proxy fullPath)
 
       handler :: RawHandler
-      handler url req res =
-        methodHandler url req res
-        # executeHandler res
+      handler url req =
+        methodHandler url req
+        # executeHandler
 
       headHandler :: RawHandler
-      headHandler url req res =
-        methodHandler url req res
+      headHandler url req =
+        methodHandler url req
         <#> Resp.setBody EmptyBody
-        # executeHandler res
+        # executeHandler
       
       methodHandler :: MethodHandler
       methodHandler = handle
@@ -186,21 +186,18 @@ instance routableListCons ::
       payloadHandler :: handler
       payloadHandler = get (Proxy :: Proxy routeName) handlers
 
-executeHandler :: HTTP.Response -> Result RawResponse -> Aff Outcome
-executeHandler res mHandler = do
+executeHandler :: Result RawResponse -> Aff Outcome
+executeHandler mHandler = do
   result <- Aff.attempt $ runExceptT mHandler
   case result of
     Right (Right rawResponse) -> do
-      liftEffect $ sendResponse res rawResponse
-      pure Success
+      pure $ Success rawResponse
     Right (Left (Resp.Error errorResp)) -> do
-      liftEffect $ sendResponse res errorResp
-      pure Failure
+      pure $ Failure errorResp
     Right (Left (Resp.Forward error)) -> pure (Forward error)
     Left error -> do
       liftEffect $ errorShow error
-      liftEffect $ sendResponse res (Resp.internalError (StringBody "Internal error"))
-      pure Failure
+      pure $ Failure (Resp.internalError (StringBody "Internal error"))
 
 instance routableListConsRoutes ::
   ( IsSymbol parentName

@@ -33,7 +33,7 @@ import Node.URL as Url
 import Payload.Internal.UrlParsing (Segment)
 import Payload.ResponseTypes (ResponseBody(..))
 import Payload.Server.Internal.Request (RequestUrl)
-import Payload.Server.Internal.ServerResponse (writeResponse)
+import Payload.Server.Internal.ServerResponse (sendResponse, writeResponse)
 import Payload.Server.Internal.Trie (Trie)
 import Payload.Server.Internal.Trie as Trie
 import Payload.Server.Internal.UrlString (urlToSegments)
@@ -172,32 +172,30 @@ handleRequest cfg@{ logger } routerTrie req res = do
   let url = Url.parse (HTTP.requestURL req)
   logger.logDebug (HTTP.requestMethod req <> " " <> show (url.path))
   case requestUrl req of
-    Right reqUrl -> runHandlers cfg routerTrie reqUrl req res
+    Right reqUrl -> Aff.launchAff_ $ runHandlers cfg routerTrie reqUrl req >>= case _ of
+        Success r -> liftEffect $ sendResponse res r
+        Failure r -> liftEffect $ sendResponse res r
+        Forward _ -> liftEffect $ writeResponse res (Response.notFound (StringBody ""))
     Left err -> do
       writeResponse res (internalError $ StringBody $ "Path could not be decoded: " <> show err)
 
 runHandlers :: Config -> Trie HandlerEntry -> RequestUrl
-               -> HTTP.Request -> HTTP.Response -> Effect Unit
-runHandlers { logger } routerTrie reqUrl req res = do
+               -> HTTP.Request -> Aff Outcome
+runHandlers { logger } routerTrie reqUrl req = do
   let (matches :: List HandlerEntry) = Trie.lookup (reqUrl.method : reqUrl.path) routerTrie
   let matchesStr = String.joinWith "\n" (Array.fromFoldable $ (showRouteUrl <<< _.route) <$> matches)
-  logger.logDebug $ showUrl reqUrl <> " -> " <> show (List.length matches) <> " matches:\n" <> matchesStr
-  Aff.launchAff_ $ do
-    outcome <- handleNext Nothing matches
-    case outcome of
-      (Forward msg) -> do
-        liftEffect $ writeResponse res (Response.notFound (StringBody ""))
-      _ -> pure unit
+  liftEffect $ logger.logDebug $ showUrl reqUrl <> " -> " <> show (List.length matches) <> " matches:\n" <> matchesStr
+  handleNext Nothing matches
   where
     handleNext :: Maybe Outcome -> List HandlerEntry -> Aff Outcome
     handleNext Nothing ({ handler } : rest) = do
-      outcome <- handler reqUrl req res
+      outcome <- handler reqUrl req
       handleNext (Just outcome) rest
-    handleNext (Just Success) _ = pure Success
-    handleNext (Just Failure) _ = pure Failure
+    handleNext (Just (Success r)) _ = pure $ Success r
+    handleNext (Just (Failure r)) _ = pure $ Failure r
     handleNext (Just (Forward msg)) ({ handler } : rest) = do
       liftEffect $ logger.logDebug $ "-> Forwarding to next route. Previous failure: " <> msg
-      outcome <- handler reqUrl req res
+      outcome <- handler reqUrl req
       handleNext (Just outcome) rest
     handleNext (Just (Forward msg)) Nil = do
       liftEffect $ logger.logDebug $ "-> No more routes to try. Last failure: " <> msg
