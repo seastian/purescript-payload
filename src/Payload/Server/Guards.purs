@@ -76,35 +76,36 @@ rawRequest req = pure req
 cookies :: HTTP.Request -> Aff (Map String String)
 cookies req = pure (Cookies.requestCookies req)
 
-type GuardFn a = HTTP.Request -> Aff a
+type GuardFn r a = r -> Aff a
 
 class RunGuards
   (guardNames :: GuardList)
   (guardsSpec :: Row Type)
   (allGuards :: Row Type)
   (results :: Row Type)
-  (routeGuardSpec :: Row Type) | guardNames guardsSpec allGuards -> routeGuardSpec where
+  (routeGuardSpec :: Row Type)
+  r | guardNames guardsSpec allGuards -> routeGuardSpec where
   runGuards :: Guards guardNames
                -> GuardTypes (Record guardsSpec)
                -> Record allGuards
                -> Record results
-               -> HTTP.Request
+               -> r
                -> Result (Record routeGuardSpec)
 
-instance runGuardsNil :: RunGuards GNil guardsSpec allGuards routeGuardSpec routeGuardSpec where
+instance runGuardsNil :: RunGuards GNil guardsSpec allGuards routeGuardSpec routeGuardSpec r where
   runGuards _ _ allGuards results req = pure results
 
 instance runGuardsCons ::
   ( IsSymbol name
   , Row.Cons name guardVal guardsSpec' guardsSpec
-  , Row.Cons name (GuardFn guardRes) allGuards' allGuards
+  , Row.Cons name (GuardFn r guardRes) allGuards' allGuards
   , Row.Cons name guardVal results newResults
   , Row.Lacks name results
   , ToGuardVal guardRes guardVal
-  , RunGuards rest guardsSpec allGuards newResults routeGuardSpec
-  ) => RunGuards (GCons name rest) guardsSpec allGuards results routeGuardSpec where
+  , RunGuards rest guardsSpec allGuards newResults routeGuardSpec r
+  ) => RunGuards (GCons name rest) guardsSpec allGuards results routeGuardSpec r where
   runGuards _ _ allGuards results req = do
-    let (guardHandler :: GuardFn guardRes) = Record.get (Proxy :: Proxy name) (to allGuards)
+    let (guardHandler :: GuardFn r guardRes) = Record.get (Proxy :: Proxy name) (to allGuards)
     (guardHandlerResult :: guardRes) <- lift $ guardHandler req
     (guardResult :: guardVal) <- toGuardVal guardHandlerResult
     let newResults = Record.insert (Proxy :: Proxy name) guardResult results

@@ -89,7 +89,7 @@ type Logger =
 -- | Start server with default options, ignoring unexpected startup errors.
 launch
   :: forall routesSpec handlers
-   . Routable routesSpec {} handlers {}
+   . Routable routesSpec {} handlers {} HTTP.Request
   => Spec routesSpec
   -> handlers
   -> Effect Unit
@@ -98,7 +98,7 @@ launch routeSpec handlers = Aff.launchAff_ (Aff.apathize $ start_ routeSpec hand
 -- | Start server with default options and given route spec and handlers (no guards).
 start_
   :: forall routesSpec handlers
-   . Routable routesSpec {} handlers {}
+   . Routable routesSpec {} handlers {} HTTP.Request
   => Spec routesSpec
   -> handlers
   -> Aff (Either String Server)
@@ -107,7 +107,7 @@ start_ = start defaultOpts
 -- | Start server with given routes and handlers (no guards).
 start
   :: forall routesSpec handlers
-   . Routable routesSpec {} handlers {}
+   . Routable routesSpec {} handlers {} HTTP.Request
   => Options
   -> Spec routesSpec
   -> handlers
@@ -119,7 +119,7 @@ start opts routeSpec handlers = startGuarded opts api { handlers, guards: {} }
 -- | Start server with default options and given spec, handlers, and guards.
 startGuarded_
   :: forall routesSpec guardsSpec handlers guards
-   . Routable routesSpec guardsSpec handlers guards
+   . Routable routesSpec guardsSpec handlers guards HTTP.Request
   => Spec { routes :: routesSpec, guards :: guardsSpec }
   -> { handlers :: handlers, guards :: guards }
   -> Aff (Either String Server)
@@ -128,7 +128,7 @@ startGuarded_ = startGuarded defaultOpts
 -- | Start server with given spec, handlers, and guards.
 startGuarded
   :: forall routesSpec guardsSpec handlers guards
-   . Routable routesSpec guardsSpec handlers guards
+   . Routable routesSpec guardsSpec handlers guards HTTP.Request
   => Options
   -> Spec { guards :: guardsSpec, routes :: routesSpec }
   -> { handlers :: handlers, guards :: guards }
@@ -143,10 +143,10 @@ startGuarded opts apiSpec api = do
       pure (const server <$> listenResult)
     Left err -> pure (Left err)
 
-dumpRoutes :: Trie HandlerEntry -> Effect Unit
+dumpRoutes :: forall r. Trie (HandlerEntry r) -> Effect Unit
 dumpRoutes = log <<< showRoutes
 
-showRoutes :: Trie HandlerEntry -> String
+showRoutes :: forall r. Trie (HandlerEntry r)-> String
 showRoutes routerTrie = Trie.dumpEntries (_.route <$> routerTrie)
 
 mkConfig :: Options -> Config
@@ -167,7 +167,7 @@ mkLogger logLevel = { log: log_, logDebug, logError }
     logError | logLevel >= LogError = log
     logError = const $ pure unit
 
-handleRequest :: Config -> Trie HandlerEntry -> HTTP.Request -> HTTP.Response -> Effect Unit
+handleRequest :: Config -> Trie (HandlerEntry HTTP.Request) -> HTTP.Request -> HTTP.Response -> Effect Unit
 handleRequest cfg@{ logger } routerTrie req res = do
   let url = Url.parse (HTTP.requestURL req)
   logger.logDebug (HTTP.requestMethod req <> " " <> show (url.path))
@@ -179,15 +179,15 @@ handleRequest cfg@{ logger } routerTrie req res = do
     Left err -> do
       writeResponse res (internalError $ StringBody $ "Path could not be decoded: " <> show err)
 
-runHandlers :: Config -> Trie HandlerEntry -> RequestUrl
-               -> HTTP.Request -> Aff Outcome
+runHandlers :: forall r. Config -> Trie (HandlerEntry r) -> RequestUrl
+               -> r -> Aff Outcome
 runHandlers { logger } routerTrie reqUrl req = do
-  let (matches :: List HandlerEntry) = Trie.lookup (reqUrl.method : reqUrl.path) routerTrie
+  let (matches :: List (HandlerEntry r)) = Trie.lookup (reqUrl.method : reqUrl.path) routerTrie
   let matchesStr = String.joinWith "\n" (Array.fromFoldable $ (showRouteUrl <<< _.route) <$> matches)
   liftEffect $ logger.logDebug $ showUrl reqUrl <> " -> " <> show (List.length matches) <> " matches:\n" <> matchesStr
   handleNext Nothing matches
   where
-    handleNext :: Maybe Outcome -> List HandlerEntry -> Aff Outcome
+    handleNext :: Maybe Outcome -> List (HandlerEntry r) -> Aff Outcome
     handleNext Nothing ({ handler } : rest) = do
       outcome <- handler reqUrl req
       handleNext (Just outcome) rest
@@ -202,7 +202,7 @@ runHandlers { logger } routerTrie reqUrl req = do
       pure (Forward "No match could handle")
     handleNext _ Nil = pure (Forward "No match could handle")
 
-showMatches :: List HandlerEntry -> String
+showMatches :: forall r. List (HandlerEntry r) -> String
 showMatches matches = "    " <> String.joinWith "\n    " (Array.fromFoldable $ showMatch <$> matches)
   where
     showMatch = showRouteUrl <<< _.route

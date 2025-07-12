@@ -3,6 +3,8 @@ module Payload.Server.Handleable
        , MethodHandler
        , handle
        , class DecodeOptionalBody
+       , class RequestOps
+       , readBody
        , decodeOptionalBody
        ) where
 
@@ -38,7 +40,10 @@ import Prim.Symbol as Symbol
 import Type.Equality (class TypeEquals, to)
 import Type.Proxy (Proxy(..))
 
-type MethodHandler = RequestUrl -> HTTP.Request -> Result RawResponse
+type MethodHandler r = RequestUrl -> r -> Result RawResponse
+
+class RequestOps r where
+    readBody :: r -> Aff String
 
 class Handleable
   route
@@ -47,7 +52,8 @@ class Handleable
   (baseParams :: Row Type)
   (baseGuards :: GuardList)
   (guardsSpec :: Row Type)
-  guards | route -> handler where
+  guards
+  r | route -> handler where
   handle :: Proxy basePath
             -> Proxy (Record baseParams)
             -> Guards baseGuards
@@ -56,7 +62,7 @@ class Handleable
             -> handler
             -> guards
             -> RequestUrl
-            -> HTTP.Request
+            -> r
             -> Result RawResponse
 
 instance handleablePostRoute ::
@@ -89,7 +95,8 @@ instance handleablePostRoute ::
        , OmitEmpty payloadWithEmpty payload
 
        , GuardParsing.Append baseGuards guardNames fullGuards
-       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec
+       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec resp
+       , RequestOps resp
        )
     => Handleable (Route "POST" path (Record route))
                   (Record payload -> Aff handlerRes)
@@ -97,7 +104,8 @@ instance handleablePostRoute ::
                   baseParams
                   baseGuards
                   guardsSpec
-                  (Record allGuards) where
+                  (Record allGuards)
+                  resp where
   handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
@@ -144,7 +152,8 @@ instance handleableGetRoute ::
        , OmitEmpty payloadWithEmpty payload
 
        , GuardParsing.Append baseGuards guardNames fullGuards
-       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec
+       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec resp
+       , RequestOps resp
        )
     => Handleable (Route "GET" path (Record route))
                   (Record payload -> Aff handlerRes)
@@ -152,7 +161,8 @@ instance handleableGetRoute ::
                   baseParams
                   baseGuards
                   guardsSpec
-                  (Record allGuards) where
+                  (Record allGuards)
+                  resp where
   handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
@@ -197,7 +207,8 @@ instance handleableHeadRoute ::
        , OmitEmpty payloadWithEmpty payload
 
        , GuardParsing.Append baseGuards guardNames fullGuards
-       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec
+       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec resp
+       , RequestOps resp
        )
     => Handleable (Route "HEAD" path (Record route))
                   (Record payload -> Aff handlerRes)
@@ -205,7 +216,8 @@ instance handleableHeadRoute ::
                   baseParams
                   baseGuards
                   guardsSpec
-                  (Record allGuards) where
+                  (Record allGuards)
+                  resp where
   handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
@@ -253,7 +265,8 @@ instance handleablePutRoute ::
        , OmitEmpty payloadWithEmpty payload
 
        , GuardParsing.Append baseGuards guardNames fullGuards
-       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec
+       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec resp
+       , RequestOps resp
        )
     => Handleable (Route "PUT" path (Record route))
                   (Record payload -> Aff handlerRes)
@@ -261,7 +274,8 @@ instance handleablePutRoute ::
                   baseParams
                   baseGuards
                   guardsSpec
-                  (Record allGuards) where
+                  (Record allGuards)
+                  resp where
   handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
@@ -311,7 +325,8 @@ instance handleableDeleteRoute ::
        , OmitEmpty payloadWithEmpty payload
 
        , GuardParsing.Append baseGuards guardNames fullGuards
-       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec
+       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec resp
+       , RequestOps resp
        )
     => Handleable (Route "DELETE" path (Record route))
                   (Record payload -> Aff handlerRes)
@@ -319,7 +334,8 @@ instance handleableDeleteRoute ::
                   baseParams
                   baseGuards
                   guardsSpec
-                  (Record allGuards) where
+                  (Record allGuards)
+                  resp where
   handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
@@ -366,7 +382,8 @@ instance handleableOptionsRoute ::
        , OmitEmpty payloadWithEmpty payload
 
        , GuardParsing.Append baseGuards guardNames fullGuards
-       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec
+       , RunGuards fullGuards guardsSpec allGuards () routeGuardSpec resp
+       , RequestOps resp
        )
     => Handleable (Route "OPTIONS" path (Record route))
                   (Record payload -> Aff handlerRes)
@@ -374,7 +391,8 @@ instance handleableOptionsRoute ::
                   baseParams
                   baseGuards
                   guardsSpec
-                  (Record allGuards) where
+                  (Record allGuards)
+                  resp where
   handle _ _ _ _ route handler allGuards { method, path, query } req = do
     guards <- runGuards (Guards :: _ fullGuards) (GuardTypes :: _ (Record guardsSpec)) allGuards {} req
     params <- withExceptT Forward $ except $ decodePath path
@@ -402,8 +420,8 @@ mkResponse _ _ aff = do
   (rawResp :: RawResponse) <- Resp.encodeResponse specResp
   pure rawResp
 
-readBody :: HTTP.Request -> Aff String
-readBody req = Aff.makeAff (readBody_ req)
+instance RequestOps HTTP.Request where
+  readBody req = Aff.makeAff (readBody_ req)
 
 readBody_ :: HTTP.Request -> (Either Ex.Error String -> Effect Unit) -> Effect Aff.Canceler
 readBody_ req cb = do

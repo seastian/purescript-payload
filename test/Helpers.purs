@@ -17,7 +17,7 @@ import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff, error, throwError)
 import Effect.Aff as Aff
 import Effect.Class (liftEffect)
-import Effect.Class.Console (log)
+import Node.HTTP as HTTP
 import Payload.Client.Response (ClientResponse)
 import Payload.Headers (Headers)
 import Payload.Headers as Headers
@@ -30,7 +30,7 @@ import Test.Unit.Assert as Assert
 
 withServer
   :: forall routesSpec guardsSpec handlers guards
-   . Routable routesSpec guardsSpec handlers guards
+   . Routable routesSpec guardsSpec handlers guards HTTP.Request
   => Spec { routes :: routesSpec, guards :: guardsSpec }
   -> { handlers :: handlers, guards :: guards }
   -> Aff Unit
@@ -57,7 +57,7 @@ whileServerRuns runServer doWhileRunning = do
                                  Aff.delay (Aff.Milliseconds 10.0)
 
 withRoutes :: forall routesSpec handlers
-  . Routable routesSpec {} handlers {}
+  . Routable routesSpec {} handlers {} HTTP.Request
   => Spec routesSpec
   -> handlers
   -> Aff Unit
