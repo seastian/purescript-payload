@@ -16,8 +16,7 @@ import Prelude
 
 import Data.Array as Array
 import Data.Either (Either(..))
-import Data.List (List(..), (:))
-import Data.List as List
+import Data.List (List)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Nullable (toMaybe)
 import Data.String as String
@@ -30,8 +29,8 @@ import Effect.Exception (Error)
 import Node.HTTP as HTTP
 import Node.URL (URL)
 import Node.URL as Url
-import Payload.Internal.UrlParsing (Segment)
 import Payload.ResponseTypes (ResponseBody(..))
+import Payload.RunHandlers (Config, Logger, runHandlers, showRouteUrl)
 import Payload.Server.Internal.Request (RequestUrl)
 import Payload.Server.Internal.ServerResponse (sendResponse, writeResponse)
 import Payload.Server.Internal.Trie (Trie)
@@ -76,15 +75,6 @@ defaultOpts =
   , logLevel: LogNormal }
 
 newtype Server = Server HTTP.Server
-
-type Config =
-  { logger :: Logger }
-
-type Logger =
-  { log :: String -> Effect Unit
-  , logDebug :: String -> Effect Unit
-  , logError :: String -> Effect Unit
-  }
 
 -- | Start server with default options, ignoring unexpected startup errors.
 launch
@@ -179,42 +169,11 @@ handleRequest cfg@{ logger } routerTrie req res = do
     Left err -> do
       writeResponse res (internalError $ StringBody $ "Path could not be decoded: " <> show err)
 
-runHandlers :: forall r. Config -> Trie (HandlerEntry r) -> RequestUrl
-               -> r -> Aff Outcome
-runHandlers { logger } routerTrie reqUrl req = do
-  let (matches :: List (HandlerEntry r)) = Trie.lookup (reqUrl.method : reqUrl.path) routerTrie
-  let matchesStr = String.joinWith "\n" (Array.fromFoldable $ (showRouteUrl <<< _.route) <$> matches)
-  liftEffect $ logger.logDebug $ showUrl reqUrl <> " -> " <> show (List.length matches) <> " matches:\n" <> matchesStr
-  handleNext Nothing matches
-  where
-    handleNext :: Maybe Outcome -> List (HandlerEntry r) -> Aff Outcome
-    handleNext Nothing ({ handler } : rest) = do
-      outcome <- handler reqUrl req
-      handleNext (Just outcome) rest
-    handleNext (Just (Success r)) _ = pure $ Success r
-    handleNext (Just (Failure r)) _ = pure $ Failure r
-    handleNext (Just (Forward msg)) ({ handler } : rest) = do
-      liftEffect $ logger.logDebug $ "-> Forwarding to next route. Previous failure: " <> msg
-      outcome <- handler reqUrl req
-      handleNext (Just outcome) rest
-    handleNext (Just (Forward msg)) Nil = do
-      liftEffect $ logger.logDebug $ "-> No more routes to try. Last failure: " <> msg
-      pure (Forward "No match could handle")
-    handleNext _ Nil = pure (Forward "No match could handle")
-
 showMatches :: forall r. List (HandlerEntry r) -> String
 showMatches matches = "    " <> String.joinWith "\n    " (Array.fromFoldable $ showMatch <$> matches)
   where
     showMatch = showRouteUrl <<< _.route
 
-showUrl :: RequestUrl -> String
-showUrl { method, path, query } = method <> " " <> fullPath
-  where fullPath = String.joinWith "/" (Array.fromFoldable path)
-
-showRouteUrl :: List Segment -> String
-showRouteUrl (method : rest) = show method <> " /" <> String.joinWith "/" (Array.fromFoldable $ show <$> rest)
-showRouteUrl Nil = ""
-  
 requestUrl :: HTTP.Request -> Either String RequestUrl
 requestUrl req = do
   let parsedUrl = Url.parse (HTTP.requestURL req)
