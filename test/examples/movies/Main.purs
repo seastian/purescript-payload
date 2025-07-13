@@ -160,10 +160,11 @@ deleteRating :: { params :: { movieId :: Int }
                 } -> Aff StatusCodeResponse
 deleteRating _ = pure { statusCode: 1, statusMessage: "Deleted" }
 
-getApiKey :: HTTP.Request -> Aff (Either String ApiKey)
+getApiKey :: Int -> Aff (Either String ApiKey)
 getApiKey req = do
-  let cookies = requestCookies req
-  pure $ note "No cookie" $ Map.lookup "apiKey" cookies
+  pure $ pure "asdfasd"
+  -- let cookies = requestCookies req
+  -- pure $ note "No cookie" $ Map.lookup "apiKey" cookies
 
 getSessionId :: HTTP.Request -> Aff (Either String SessionId)
 getSessionId req = do
