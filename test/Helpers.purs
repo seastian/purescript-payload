@@ -17,8 +17,8 @@ import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff, error, throwError)
 import Effect.Aff as Aff
 import Effect.Class (liftEffect)
-import Node.HTTP as HTTP
 import Payload.Client.Response (ClientResponse)
+import Payload.HTTP (HTTPRequest)
 import Payload.Headers (Headers)
 import Payload.Headers as Headers
 import Payload.ResponseTypes (Response(..))
@@ -30,7 +30,7 @@ import Test.Unit.Assert as Assert
 
 withServer
   :: forall routesSpec guardsSpec handlers guards
-   . Routable routesSpec guardsSpec handlers guards HTTP.Request
+   . Routable routesSpec guardsSpec handlers guards HTTPRequest
   => Spec { routes :: routesSpec, guards :: guardsSpec }
   -> { handlers :: handlers, guards :: guards }
   -> Aff Unit
@@ -52,12 +52,12 @@ whileServerRuns runServer doWhileRunning = do
     completed (Left _) = pure unit
     completed (Right server) = do
                                  liftEffect $ Payload.closeAllConnections server
-                                 Payload.close server
+                                 liftEffect $ Payload.close server
                                  -- A short delay seems to give time to clean up
                                  Aff.delay (Aff.Milliseconds 10.0)
 
 withRoutes :: forall routesSpec handlers
-  . Routable routesSpec {} handlers {} HTTP.Request
+  . Routable routesSpec {} handlers {} HTTPRequest
   => Spec routesSpec
   -> handlers
   -> Aff Unit

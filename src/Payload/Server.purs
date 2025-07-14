@@ -17,18 +17,23 @@ import Prelude
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.List (List)
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Nullable (toMaybe)
+import Data.Maybe (Maybe(..))
 import Data.String as String
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff as Aff
 import Effect.Class (liftEffect)
 import Effect.Console (log)
-import Effect.Exception (Error)
+import Node.EventEmitter (on)
 import Node.HTTP as HTTP
-import Node.URL (URL)
+import Node.HTTP.IncomingMessage as HTTP.IncomingMessage
+import Node.HTTP.Server (requestH, toNetServer)
+import Node.HTTP.Server as HTTP.Server
+import Node.HTTP.Types as HTTP.Types
+import Node.Net.Server (listenTcp)
+import Node.Net.Server as Net.Server
 import Node.URL as Url
+import Payload.HTTP (HTTPRequest, HTTPResponse)
 import Payload.ResponseTypes (ResponseBody(..))
 import Payload.RunHandlers (Config, Logger, runHandlers, showRouteUrl)
 import Payload.Server.Internal.Request (RequestUrl)
@@ -45,7 +50,7 @@ import Type.Proxy (Proxy(..))
 
 type Options =
   { backlog :: Maybe Int
-  , hostname :: String
+  , host :: String
   , port :: Int
   , logLevel :: LogLevel }
 
@@ -70,16 +75,16 @@ instance ordLogLevel :: Ord LogLevel where
 defaultOpts :: Options
 defaultOpts =
   { backlog: Nothing
-  , hostname: "0.0.0.0"
+  , host: "0.0.0.0"
   , port: 3000
   , logLevel: LogNormal }
 
-newtype Server = Server HTTP.Server
+newtype Server = Server HTTP.Types.HttpServer
 
 -- | Start server with default options, ignoring unexpected startup errors.
 launch
   :: forall routesSpec handlers
-   . Routable routesSpec {} handlers {} HTTP.Request
+   . Routable routesSpec {} handlers {} HTTPRequest
   => Spec routesSpec
   -> handlers
   -> Effect Unit
@@ -88,7 +93,7 @@ launch routeSpec handlers = Aff.launchAff_ (Aff.apathize $ start_ routeSpec hand
 -- | Start server with default options and given route spec and handlers (no guards).
 start_
   :: forall routesSpec handlers
-   . Routable routesSpec {} handlers {} HTTP.Request
+   . Routable routesSpec {} handlers {} HTTPRequest
   => Spec routesSpec
   -> handlers
   -> Aff (Either String Server)
@@ -97,19 +102,19 @@ start_ = start defaultOpts
 -- | Start server with given routes and handlers (no guards).
 start
   :: forall routesSpec handlers
-   . Routable routesSpec {} handlers {} HTTP.Request
+   . Routable routesSpec {} handlers {} HTTPRequest
   => Options
   -> Spec routesSpec
   -> handlers
   -> Aff (Either String Server)
-start opts routeSpec handlers = startGuarded opts api { handlers, guards: {} }
+start opts _ handlers = startGuarded opts api { handlers, guards: {} }
   where
     api = Spec :: Spec { routes :: routesSpec, guards :: {} }
 
 -- | Start server with default options and given spec, handlers, and guards.
 startGuarded_
   :: forall routesSpec guardsSpec handlers guards
-   . Routable routesSpec guardsSpec handlers guards HTTP.Request
+   . Routable routesSpec guardsSpec handlers guards HTTPRequest
   => Spec { routes :: routesSpec, guards :: guardsSpec }
   -> { handlers :: handlers, guards :: guards }
   -> Aff (Either String Server)
@@ -118,7 +123,7 @@ startGuarded_ = startGuarded defaultOpts
 -- | Start server with given spec, handlers, and guards.
 startGuarded
   :: forall routesSpec guardsSpec handlers guards
-   . Routable routesSpec guardsSpec handlers guards HTTP.Request
+   . Routable routesSpec guardsSpec handlers guards HTTPRequest
   => Options
   -> Spec { guards :: guardsSpec, routes :: routesSpec }
   -> { handlers :: handlers, guards :: guards }
@@ -127,11 +132,16 @@ startGuarded opts apiSpec api = do
   let cfg = mkConfig opts
   case mkRouter apiSpec api of
     Right routerTrie -> do
-      server <- Server <$> (liftEffect $ HTTP.createServer (handleRequest cfg routerTrie))
-      let httpOpts = Record.delete (Proxy :: Proxy "logLevel") opts
-      listenResult <- listen cfg server httpOpts
-      pure (const server <$> listenResult)
+      server <- liftEffect HTTP.createServer
+      void $ liftEffect (server # on requestH \req res -> do
+        handleRequest cfg routerTrie req res)
+      let httpOpts = Record.delete (Proxy :: Proxy "logLevel") $ Record.delete (Proxy :: Proxy "backlog") opts
+      liftEffect $ listenTcp (toNetServer server) httpOpts
+      liftEffect $ cfg.logger.log startedMsg
+      pure $ pure $ Server server
     Left err -> pure (Left err)
+  where
+  startedMsg = "Server is running on http://" <> opts.host <> ":" <> show opts.port
 
 dumpRoutes :: forall r. Trie (HandlerEntry r) -> Effect Unit
 dumpRoutes = log <<< showRoutes
@@ -157,11 +167,11 @@ mkLogger logLevel = { log: log_, logDebug, logError }
     logError | logLevel >= LogError = log
     logError = const $ pure unit
 
-handleRequest :: Config -> Trie (HandlerEntry HTTP.Request) -> HTTP.Request -> HTTP.Response -> Effect Unit
+handleRequest :: Config -> Trie (HandlerEntry HTTPRequest) -> HTTPRequest -> HTTPResponse -> Effect Unit
 handleRequest cfg@{ logger } routerTrie req res = do
-  let url = Url.parse (HTTP.requestURL req)
-  logger.logDebug (HTTP.requestMethod req <> " " <> show (url.path))
-  case requestUrl req of
+  let url = HTTP.IncomingMessage.url req
+  logger.logDebug (HTTP.IncomingMessage.method req <> " " <> url)
+  requestUrl req >>= case _ of
     Right reqUrl -> Aff.launchAff_ $ runHandlers cfg routerTrie reqUrl req >>= case _ of
         Success r -> liftEffect $ sendResponse res r
         Failure r -> liftEffect $ sendResponse res r
@@ -174,43 +184,20 @@ showMatches matches = "    " <> String.joinWith "\n    " (Array.fromFoldable $ s
   where
     showMatch = showRouteUrl <<< _.route
 
-requestUrl :: HTTP.Request -> Either String RequestUrl
+requestUrl :: HTTPRequest -> Effect (Either String RequestUrl)
 requestUrl req = do
-  let parsedUrl = Url.parse (HTTP.requestURL req)
-  path <- urlPath parsedUrl
-  let query = fromMaybe "" $ toMaybe parsedUrl.query
+  parsedUrl <- Url.new (HTTP.IncomingMessage.url req)
+  path <- Url.pathname parsedUrl
+  query <- Url.search parsedUrl
   let pathSegments = urlToSegments path
-  pure { method, path: pathSegments, query }
+  pure $ pure { method, path: pathSegments, query }
   where
-    method = HTTP.requestMethod req
-
-urlPath :: URL -> Either String String
-urlPath url = url.pathname
-  # toMaybe
-  # maybe (Left "No path") Right
-
-urlQuery :: URL -> Maybe String
-urlQuery url = url.query # toMaybe
-
-foreign import onError :: HTTP.Server -> (Error -> Effect Unit) -> Effect Unit
-
-listen :: Config -> Server -> HTTP.ListenOptions -> Aff (Either String Unit)
-listen { logger } server@(Server httpServer) opts = Aff.makeAff $ \cb -> do
-  onError httpServer \error -> cb (Right (Left (show error)))
-  HTTP.listen httpServer opts (logger.log startedMsg *> cb (Right (Right unit)))
-  pure $ Aff.Canceler (\error -> liftEffect (logger.logError (errorMsg error)) *> close server)
-  where
-    startedMsg = "Server is running on http://" <> opts.hostname <> ":" <> show opts.port
-    errorMsg e = "Closing server due to error: " <> show e
+    method = HTTP.IncomingMessage.method req
 
 -- | Stops the server from accepting new connections and closes all connections connected to this server which are not sending a request or waiting for a response.
-close :: Server -> Aff Unit
-close (Server server) = Aff.makeAff $ \cb -> do
-  HTTP.close server (cb (Right unit))
-  pure Aff.nonCanceler
-
-foreign import closeAllConnectionsImpl :: HTTP.Server -> Effect Unit
+close :: Server -> Effect Unit
+close (Server server) = Net.Server.close (toNetServer server)
 
 -- | Closes all connections connected to this server.
 closeAllConnections :: Server -> Effect Unit
-closeAllConnections (Server server) = closeAllConnectionsImpl server
+closeAllConnections (Server server) = HTTP.Server.closeAllConnections server

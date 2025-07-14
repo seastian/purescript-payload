@@ -20,6 +20,8 @@ import Data.Tuple (Tuple)
 import Effect.Aff (Aff)
 import Foreign.Object as Object
 import Node.HTTP as HTTP
+import Node.HTTP.IncomingMessage as IM
+import Payload.HTTP (HTTPRequest)
 import Payload.Headers (Headers)
 import Payload.Headers as Headers
 import Payload.ResponseTypes (Failure(..), Response, Result)
@@ -62,18 +64,18 @@ else instance toGuardValIdentity :: ToGuardVal a a where
   toGuardVal = pure
 
 -- | Guard for retrieving request headers
-headers :: HTTP.Request -> Aff Headers
+headers :: HTTPRequest -> Aff Headers
 headers req = pure (Headers.fromFoldable headersArr)
   where
     headersArr :: Array (Tuple String String)
-    headersArr = Object.toUnfoldable $ HTTP.requestHeaders req
+    headersArr = Object.toUnfoldable $ IM.headers req
 
 -- | Guard for retrieving raw underlying request
-rawRequest :: HTTP.Request -> Aff HTTP.Request
+rawRequest :: HTTPRequest -> Aff HTTPRequest
 rawRequest req = pure req
 
 -- | Guard for retrieving request cookies
-cookies :: HTTP.Request -> Aff (Map String String)
+cookies :: HTTPRequest -> Aff (Map String String)
 cookies req = pure (Cookies.requestCookies req)
 
 type GuardFn r a = r -> Aff a

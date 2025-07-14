@@ -14,14 +14,10 @@ import Control.Monad.Except (except, lift, withExceptT)
 import Data.Either (Either(..))
 import Data.List (List)
 import Data.Symbol (class IsSymbol)
-import Effect (Effect)
 import Effect.Aff (Aff)
-import Effect.Aff as Aff
-import Effect.Exception as Ex
-import Effect.Ref as Ref
-import Node.Encoding (Encoding(..))
-import Node.HTTP as HTTP
-import Node.Stream (onDataString, onEnd, onError)
+import Node.HTTP.IncomingMessage (toReadable)
+import Node.Stream.Aff (readAll, toStringUTF8)
+import Payload.HTTP (HTTPRequest)
 import Payload.Internal.Route (Undefined(..))
 import Payload.Internal.UrlParsing (class ParseUrl, class ToSegments)
 import Payload.ResponseTypes (Failure(Error, Forward), RawResponse, Response, ResponseBody(..), Result)
@@ -420,23 +416,8 @@ mkResponse _ _ aff = do
   (rawResp :: RawResponse) <- Resp.encodeResponse specResp
   pure rawResp
 
-instance RequestOps HTTP.Request where
-  readBody req = Aff.makeAff (readBody_ req)
-
-readBody_ :: HTTP.Request -> (Either Ex.Error String -> Effect Unit) -> Effect Aff.Canceler
-readBody_ req cb = do
-  buffer <- Ref.new ""
-  let inputStream = HTTP.requestAsStream req
-  let handleData str = (flip Ref.modify_) buffer (_ <> str)
-  let handleEnd = Ref.read buffer >>= returnBody
-  Ex.catchException returnError do
-    onError inputStream returnError
-    onDataString inputStream UTF8 handleData
-    onEnd inputStream handleEnd
-  pure mempty
-  where
-    returnError msg = cb $ Left $ msg
-    returnBody val = cb $ Right $ val
+instance RequestOps HTTPRequest where
+  readBody req = toStringUTF8 =<< readAll (toReadable req)
 
 class DecodeOptionalBody
   (body :: Type)

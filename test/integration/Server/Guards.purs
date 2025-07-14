@@ -7,7 +7,8 @@ import Data.Maybe (Maybe(..))
 import Data.String.Utils as StringUtils
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
-import Node.HTTP as HTTP
+import Node.HTTP.IncomingMessage as HTTP.IncomingMessage
+import Payload.HTTP (HTTPRequest)
 import Payload.Headers as Headers
 import Payload.ResponseTypes (Failure(..))
 import Payload.Server.Guards as Guards
@@ -49,16 +50,16 @@ userIndex _ = pure "User page"
 unauthenticatedIndex :: forall r. { | r} -> Aff String
 unauthenticatedIndex _ = pure "Unauthenticated page"
 
-getAdminUser :: HTTP.Request -> Aff (Either Failure AdminUser)
+getAdminUser :: HTTPRequest -> Aff (Either Failure AdminUser)
 getAdminUser req = do
   headers <- Guards.headers req
   case Headers.lookup "Authorization" headers of
     (Just "Token secret") -> pure (Right (AdminUser { id: 1, name: "John Admin" }))
     _ -> pure (Left (Forward "Not an admin"))
 
-getUser :: HTTP.Request -> Aff (Either Failure User)
+getUser :: HTTPRequest -> Aff (Either Failure User)
 getUser req = do
-  if StringUtils.endsWith "username" (HTTP.requestURL req)
+  if StringUtils.endsWith "username" (HTTP.IncomingMessage.url req)
      then pure (Right (User { id: 1, name: "John User" }))
      else pure (Left (Forward "Not a user"))
   
