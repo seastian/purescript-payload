@@ -2,10 +2,10 @@ module Payload.Examples.AppScript.Main where
 
 import Prelude
 
-import Effect (Effect)
+import Control.Promise (Promise)
 import Effect.Aff (Aff)
-import Payload.AppScript (mkAppScriptHandler)
-import Payload.Server as Payload
+import Effect.Uncurried (EffectFn1)
+import Payload.AppScript (Params, mkAppScriptHandler)
 import Payload.Spec (Spec(Spec), GET)
 
 type Message = 
@@ -33,9 +33,7 @@ handlers ::
     }
 handlers = { getMessages }
 
-handler = mkAppScriptHandler spec handlers
-
+doGet :: EffectFn1 Params (Promise String)
 doGet = handler
-
-main :: Effect Unit
-main = Payload.launch spec handlers
+  where
+  handler = mkAppScriptHandler spec handlers

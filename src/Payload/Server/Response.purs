@@ -83,8 +83,7 @@ import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (over)
-import Node.Stream (Read, Readable, Stream)
-import Node.Stream as Stream
+import Node.Stream (Stream)
 import Payload.ContentType as ContentType
 import Payload.Headers (Headers)
 import Payload.Headers as Headers
@@ -93,7 +92,6 @@ import Payload.Server.Status as Status
 import Payload.TypeErrors (type (<>), type (|>))
 import Prim.TypeError (class Fail, Quote, Text)
 import Simple.JSON as SimpleJson
-import Type.Equality (class TypeEquals)
 import Type.Proxy (Proxy)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.Streams.ReadableStream (ReadableStream)
