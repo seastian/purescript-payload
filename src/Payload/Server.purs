@@ -134,14 +134,15 @@ startGuarded opts apiSpec api = do
     Right routerTrie -> do
       server <- liftEffect HTTP.createServer
       void $ liftEffect (server # on requestH \req res -> do
-        handleRequest cfg routerTrie req res)
+        handleRequest hostname cfg routerTrie req res)
       let httpOpts = Record.delete (Proxy :: Proxy "logLevel") $ Record.delete (Proxy :: Proxy "backlog") opts
       liftEffect $ listenTcp (toNetServer server) httpOpts
       liftEffect $ cfg.logger.log startedMsg
       pure $ pure $ Server server
     Left err -> pure (Left err)
   where
-  startedMsg = "Server is running on http://" <> opts.host <> ":" <> show opts.port
+  hostname = "http://" <> opts.host <> ":" <> show opts.port
+  startedMsg = "Server is running on " <> hostname
 
 dumpRoutes :: forall r. Trie (HandlerEntry r) -> Effect Unit
 dumpRoutes = log <<< showRoutes
@@ -167,11 +168,11 @@ mkLogger logLevel = { log: log_, logDebug, logError }
     logError | logLevel >= LogError = log
     logError = const $ pure unit
 
-handleRequest :: Config -> Trie (HandlerEntry HTTPRequest) -> HTTPRequest -> HTTPResponse -> Effect Unit
-handleRequest cfg@{ logger } routerTrie req res = do
+handleRequest :: String -> Config -> Trie (HandlerEntry HTTPRequest) -> HTTPRequest -> HTTPResponse -> Effect Unit
+handleRequest hostname cfg@{ logger } routerTrie req res = do
   let url = HTTP.IncomingMessage.url req
   logger.logDebug (HTTP.IncomingMessage.method req <> " " <> url)
-  requestUrl req >>= case _ of
+  requestUrl hostname req >>= case _ of
     Right reqUrl -> Aff.launchAff_ $ runHandlers cfg routerTrie reqUrl req >>= case _ of
         Success r -> liftEffect $ sendResponse res r
         Failure r -> liftEffect $ sendResponse res r
@@ -184,11 +185,11 @@ showMatches matches = "    " <> String.joinWith "\n    " (Array.fromFoldable $ s
   where
     showMatch = showRouteUrl <<< _.route
 
-requestUrl :: HTTPRequest -> Effect (Either String RequestUrl)
-requestUrl req = do
-  parsedUrl <- Url.new (HTTP.IncomingMessage.url req)
+requestUrl :: String -> HTTPRequest -> Effect (Either String RequestUrl)
+requestUrl hostname req = do
+  parsedUrl <- Url.new (hostname <> HTTP.IncomingMessage.url req)
   path <- Url.pathname parsedUrl
-  query <- Url.search parsedUrl
+  query <- String.drop 1 <$> Url.search parsedUrl
   let pathSegments = urlToSegments path
   pure $ pure { method, path: pathSegments, query }
   where
