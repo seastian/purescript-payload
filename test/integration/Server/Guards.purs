@@ -11,7 +11,7 @@ import Node.HTTP.IncomingMessage as HTTP.IncomingMessage
 import Payload.HTTP (HTTPRequest)
 import Payload.Headers as Headers
 import Payload.ResponseTypes (Failure(..))
-import Payload.Server.Guards as Guards
+import Payload.Server.Guards.HTTP as Guards
 import Payload.Spec (type (:), GET, Guards, Nil, Routes, Spec(Spec))
 import Payload.Test.Helpers (get_, respMatches, withServer)
 import Payload.Test.Helpers as Helpers

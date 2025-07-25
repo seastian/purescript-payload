@@ -9,7 +9,7 @@ import Payload.Client (mkGuardedClient)
 import Payload.Client.Options (defaultReqOpts)
 import Payload.Headers (Headers)
 import Payload.Headers as Headers
-import Payload.Server.Guards as Guards
+import Payload.Server.Guards.HTTP as Guards
 import Payload.Spec (type (:), GET, Guards, Nil, Spec(..))
 import Payload.Test.Config (TestConfig)
 import Payload.Test.Helpers (bodyEquals, withServer)

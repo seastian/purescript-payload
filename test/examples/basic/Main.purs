@@ -11,7 +11,7 @@ import Payload.Examples.Basic.Spec (AdminUser(..), Post, User)
 import Payload.HTTP (HTTPRequest)
 import Payload.Headers as Headers
 import Payload.ResponseTypes (Failure(Forward))
-import Payload.Server.Guards as Guards
+import Payload.Server.Guards.HTTP as Guards
 import Payload.Server.Handlers as Handlers
 
 getUsers :: { guards :: { adminUser :: AdminUser, request :: HTTPRequest }} -> Aff (Array User)
