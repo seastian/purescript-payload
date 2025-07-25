@@ -4,8 +4,7 @@ import Prelude
 
 import Control.Promise (Promise, fromAff)
 import Data.Either (Either(..))
-import Data.Maybe (fromMaybe)
-import Data.Nullable (Nullable, toMaybe)
+import Data.Nullable (Nullable)
 import Effect.Console as Console
 import Effect.Uncurried (EffectFn1, mkEffectFn1)
 import Foreign.Object (Object)
@@ -31,7 +30,7 @@ mkAppScriptHandler
   => Spec routesSpec
   -> handlers
   -> EffectFn1 Params (Promise String)
-mkAppScriptHandler routeSpec handlers = mkAppScriptHandlerGuarded api { handlers, guards: {} }
+mkAppScriptHandler _ handlers = mkAppScriptHandlerGuarded api { handlers, guards: {} }
   where
     api = Spec :: Spec { routes :: routesSpec, guards :: {} }
 
@@ -46,7 +45,7 @@ mkAppScriptHandlerGuarded apiSpec api = mkEffectFn1 \p@(Params params) -> do
   case mkRouter apiSpec api of
     Right routerTrie -> do
       fromAff do 
-        runHandlers cfg routerTrie { method: "GET", path: pure params.pathInfo, query: fromMaybe "" $ toMaybe params.queryString } p >>= case _ of
+        runHandlers cfg routerTrie { method: "GET", path: pure params.pathInfo, query: params.parameters } p >>= case _ of
             Success (Response { body: StringBody b }) -> pure b
             _ -> pure "ERROR"
     Left err -> fromAff do

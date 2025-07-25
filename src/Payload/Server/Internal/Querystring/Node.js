@@ -1,17 +1,20 @@
-import * as qs from "querystring"
+import * as qs from "querystring";
 
 export const querystringParse = (inputStr) => {
   var parsed = qs.parse(inputStr);
   for (var prop in parsed) {
     if (Object.prototype.hasOwnProperty.call(parsed, prop)) {
-      if (typeof parsed[prop] === 'string'){
+      if (typeof parsed[prop] === "string") {
         parsed[prop] = [parsed[prop]];
-      } else if (Array.isArray(parsed[prop])){
+      } else if (Array.isArray(parsed[prop])) {
         // Do nothing
       } else {
-        throw new Error('Expected parsed query string value to be string or array, but received ' + obj[prop]);
+        throw new Error(
+          "Expected parsed query string value to be string or array, but received " +
+            obj[prop],
+        );
       }
     }
   }
   return parsed;
-}
+};

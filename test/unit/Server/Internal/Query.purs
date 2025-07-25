@@ -8,6 +8,7 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
 import Foreign.Object as Object
 import Payload.Server.Internal.Query as Query
+import Payload.Server.Internal.Querystring.Node (querystringParse)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert as Assert
 import Type.Proxy (Proxy(..))
@@ -22,7 +23,7 @@ tests = do
             (Query.decodeQuery
               (Proxy :: Proxy "/search?limit=<limit>")
               (Proxy :: Proxy { limit :: Int })
-              "limit=12")
+              $ querystringParse "limit=12")
       test "Int: decoding fails for invalid int" do
         Assert.equal
           true
@@ -30,63 +31,63 @@ tests = do
             (Query.decodeQuery
               (Proxy :: Proxy "/search?limit=<limit>")
               (Proxy :: Proxy { limit :: Int })
-              "limit=asdf"))
+              $ querystringParse "limit=asdf"))
       test "String: decoding succeeds" do
         Assert.equal
           (Right {query: "whatever"})
             (Query.decodeQuery
               (Proxy :: Proxy "/search?query=<query>")
               (Proxy :: Proxy { query :: String })
-              "query=whatever")
+              $ querystringParse "query=whatever")
       test "Boolean: \"true\" decodes to true" do
         Assert.equal
           (Right {query: true})
             (Query.decodeQuery
               (Proxy :: Proxy "/search?query=<query>")
               (Proxy :: Proxy { query :: Boolean })
-              "query=true")
+              $ querystringParse "query=true")
       test "Boolean: \"false\" decodes to false" do
         Assert.equal
           (Right {query: false})
             (Query.decodeQuery
               (Proxy :: Proxy "/search?query=<query>")
               (Proxy :: Proxy { query :: Boolean })
-              "query=false")
+              $ querystringParse "query=false")
       test "Boolean: \"\" fails to decode" do
         Assert.equal
           true
           (isLeft (Query.decodeQuery
             (Proxy :: Proxy "/search?query=<query>")
             (Proxy :: Proxy { query :: Boolean })
-            "query="))
+            $ querystringParse "query="))
       test "Maybe: decoding Maybe Int parses Int when Int is given" do
         Assert.equal
           (Right {query: Just 1})
             (Query.decodeQuery
               (Proxy :: Proxy "/search?query=<query>")
               (Proxy :: Proxy { query :: Maybe Int })
-              "query=1")
+              $ querystringParse "query=1")
       test "Maybe: decoding Maybe Int returns Nothing when query value is empty" do
         Assert.equal
           (Right {query: Nothing})
             (Query.decodeQuery
               (Proxy :: Proxy "/search?query=<query>")
               (Proxy :: Proxy { query :: Maybe Int })
-              "query=")
+              $ querystringParse "query=")
       test "Maybe: decoding Maybe Int returns Nothing when query value is omitted" do
         Assert.equal
           (Right {query: Nothing})
             (Query.decodeQuery
               (Proxy :: Proxy "/search?query=<query>")
               (Proxy :: Proxy { query :: Maybe Int })
-              "")
+              $ querystringParse "")
       test "extra parameters are ignored" do
         Assert.equal
           (Right {limit: 12})
             (Query.decodeQuery
               (Proxy :: Proxy "/search?limit=<limit>")
               (Proxy :: Proxy { limit :: Int })
-              "foo=blah&limit=12&a=b")
+              $ querystringParse "foo=blah&limit=12&a=b")
 
     suite "Multi-match" do
       test "decoding multi-match" do
@@ -97,7 +98,7 @@ tests = do
             (Query.decodeQuery
               (Proxy :: Proxy "/search?<..all>")
               (Proxy :: Proxy { all :: Object (Array String) })
-              "foo=blah&limit=12&a=b")
+              $ querystringParse "foo=blah&limit=12&a=b")
       test "removes other matches from multi-matched result" do
         Assert.equal
           (Right { foo: "blah"
@@ -106,4 +107,4 @@ tests = do
             (Query.decodeQuery
               (Proxy :: Proxy "/search?foo=<foo>&bar=<bar>&<..all>")
               (Proxy :: Proxy { foo :: String, bar :: String, all :: Object (Array String) })
-              "foo=blah&limit=12&a=b&bar=bar")
+              $ querystringParse "foo=blah&limit=12&a=b&bar=bar")

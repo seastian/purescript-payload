@@ -36,6 +36,7 @@ import Node.URL as Url
 import Payload.HTTP (HTTPRequest, HTTPResponse)
 import Payload.ResponseTypes (ResponseBody(..))
 import Payload.RunHandlers (Config, Logger, runHandlers, showRouteUrl)
+import Payload.Server.Internal.Querystring.Node (querystringParse)
 import Payload.Server.Internal.Request (RequestUrl)
 import Payload.Server.Internal.ServerResponse (sendResponse, writeResponse)
 import Payload.Server.Internal.Trie (Trie)
@@ -189,7 +190,7 @@ requestUrl :: String -> HTTPRequest -> Effect (Either String RequestUrl)
 requestUrl hostname req = do
   parsedUrl <- Url.new (hostname <> HTTP.IncomingMessage.url req)
   path <- Url.pathname parsedUrl
-  query <- String.drop 1 <$> Url.search parsedUrl
+  query <- String.drop 1 >>> querystringParse <$> Url.search parsedUrl
   let pathSegments = urlToSegments path
   pure $ pure { method, path: pathSegments, query }
   where

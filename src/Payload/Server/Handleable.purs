@@ -27,6 +27,7 @@ import Payload.Server.Internal.GuardParsing (GuardTypes(..))
 import Payload.Server.Internal.GuardParsing as GuardParsing
 import Payload.Server.Internal.OmitEmpty (class OmitEmpty, omitEmpty)
 import Payload.Server.Internal.Query as PayloadQuery
+import Payload.Server.Internal.Querystring (ParsedQuery)
 import Payload.Server.Internal.Request (RequestUrl)
 import Payload.Server.Internal.Url as PayloadUrl
 import Payload.Server.Response as Resp
@@ -118,7 +119,7 @@ instance handleablePostRoute ::
       decodePath :: List String -> Either String (Record fullUrlParams)
       decodePath = PayloadUrl.decodeUrl (Proxy :: _ fullPath) (Proxy :: _ (Record fullUrlParams))
 
-      decodeQuery :: String -> Either String (Record query)
+      decodeQuery :: ParsedQuery -> Either String (Record query)
       decodeQuery = PayloadQuery.decodeQuery (Proxy :: _ fullPath) (Proxy :: _ (Record query))
 
 instance handleableGetRoute ::
@@ -173,7 +174,7 @@ instance handleableGetRoute ::
       decodePath :: List String -> Either String (Record fullUrlParams)
       decodePath = PayloadUrl.decodeUrl (Proxy :: _ fullPath) (Proxy :: _ (Record fullUrlParams))
 
-      decodeQuery :: String -> Either String (Record query)
+      decodeQuery :: ParsedQuery -> Either String (Record query)
       decodeQuery = PayloadQuery.decodeQuery (Proxy :: _ fullPath) (Proxy :: _ (Record query))
 
 instance handleableHeadRoute ::
@@ -228,7 +229,7 @@ instance handleableHeadRoute ::
       decodePath :: List String -> Either String (Record fullUrlParams)
       decodePath = PayloadUrl.decodeUrl (Proxy :: _ fullPath) (Proxy :: _ (Record fullUrlParams))
 
-      decodeQuery :: String -> Either String (Record query)
+      decodeQuery :: ParsedQuery -> Either String (Record query)
       decodeQuery = PayloadQuery.decodeQuery (Proxy :: _ fullPath) (Proxy :: _ (Record query))
 
 instance handleablePutRoute ::
@@ -288,7 +289,7 @@ instance handleablePutRoute ::
       decodePath :: List String -> Either String (Record fullUrlParams)
       decodePath = PayloadUrl.decodeUrl (Proxy :: _ fullPath) (Proxy :: _ (Record fullUrlParams))
 
-      decodeQuery :: String -> Either String (Record query)
+      decodeQuery :: ParsedQuery -> Either String (Record query)
       decodeQuery = PayloadQuery.decodeQuery (Proxy :: _ fullPath) (Proxy :: _ (Record query))
 
 instance handleableDeleteRoute ::
@@ -348,7 +349,7 @@ instance handleableDeleteRoute ::
       decodePath :: List String -> Either String (Record fullUrlParams)
       decodePath = PayloadUrl.decodeUrl (Proxy :: _ fullPath) (Proxy :: _ (Record fullUrlParams))
 
-      decodeQuery :: String -> Either String (Record query)
+      decodeQuery :: ParsedQuery -> Either String (Record query)
       decodeQuery = PayloadQuery.decodeQuery (Proxy :: _ fullPath) (Proxy :: _ (Record query))
 
 instance handleableOptionsRoute ::
@@ -403,7 +404,7 @@ instance handleableOptionsRoute ::
       decodePath :: List String -> Either String (Record fullUrlParams)
       decodePath = PayloadUrl.decodeUrl (Proxy :: _ fullPath) (Proxy :: _ (Record fullUrlParams))
 
-      decodeQuery :: String -> Either String (Record query)
+      decodeQuery :: ParsedQuery -> Either String (Record query)
       decodeQuery = PayloadQuery.decodeQuery (Proxy :: _ fullPath) (Proxy :: _ (Record query))
 
 mkResponse :: forall handlerRes res docRoute

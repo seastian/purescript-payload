@@ -5,7 +5,7 @@ import Prelude
 import Data.Either (Either(..))
 import Foreign.Object as Object
 import Payload.Internal.QueryParsing (Key, Multi, class ParseQuery, QueryCons, QueryListProxy(..), QueryNil, QueryList)
-import Payload.Server.Internal.Querystring (ParsedQuery, querystringParse)
+import Payload.Server.Internal.Querystring (ParsedQuery)
 import Payload.Server.QueryParams (class DecodeQueryParam, class DecodeQueryParamMulti, decodeQueryParam, decodeQueryParamMulti)
 import Prim.Row as Row
 import Record as Record
@@ -14,15 +14,13 @@ import Type.Prelude (class IsSymbol, reflectSymbol)
 import Type.Proxy (Proxy(..))
 
 class DecodeQuery (queryUrlSpec :: Symbol) query | queryUrlSpec -> query where
-  decodeQuery :: Proxy queryUrlSpec -> Proxy (Record query) -> String -> Either String (Record query)
+  decodeQuery :: Proxy queryUrlSpec -> Proxy (Record query) -> ParsedQuery -> Either String (Record query)
 
 instance decodeQueryAny ::
   ( ParseQuery queryUrlSpec queryParts
   , MatchQuery queryParts query () query
   ) => DecodeQuery queryUrlSpec query where
-  decodeQuery _ queryType queryStr = matchQuery (QueryListProxy :: _ queryParts) queryType {} parsedQuery
-    where
-      parsedQuery = querystringParse queryStr
+  decodeQuery _ queryType parsedQuery = matchQuery (QueryListProxy :: _ queryParts) queryType {} parsedQuery
 
 class MatchQuery (queryParts :: QueryList) query from to | queryParts -> from to where
   matchQuery :: QueryListProxy queryParts
