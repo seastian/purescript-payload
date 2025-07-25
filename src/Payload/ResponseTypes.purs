@@ -45,6 +45,7 @@ type RawResponse = Response ResponseBody
 
 -- | The base types of body responses that can be returned.
 data ResponseBody = StringBody String | StreamBody UnsafeStream | EmptyBody
+
 data UnsafeStream
 
 instance eqResponseBody :: Eq ResponseBody where

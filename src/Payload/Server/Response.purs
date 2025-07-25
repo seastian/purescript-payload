@@ -196,6 +196,7 @@ else instance toSpecResponseFail ::
 -- | a good place to add a Content-Type header for the encoded response.
 class EncodeResponse r where
   encodeResponse :: Response r -> Result RawResponse
+
 instance encodeResponseResponseBody :: EncodeResponse ResponseBody where
   encodeResponse = pure
 else instance encodeResponseRecord ::
