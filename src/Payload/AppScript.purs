@@ -10,7 +10,6 @@ import Effect.Uncurried (EffectFn1, mkEffectFn1)
 import Foreign.Object (Object)
 import Payload.ResponseTypes (Response(..), ResponseBody(..))
 import Payload.RunHandlers (runHandlers)
-import Payload.Server.Handleable (class RequestOps)
 import Payload.Server.Routable (class Routable, Outcome(..), mkRouter)
 import Payload.Spec (Spec(..))
 
@@ -20,9 +19,6 @@ newtype Params = Params
   , parameters :: Object (Array String)
   , pathInfo :: String
   }
-
-instance RequestOps Params where
-  readBody _ = pure ""
 
 mkAppScriptHandler
   :: forall routesSpec handlers
@@ -42,7 +38,7 @@ mkAppScriptHandlerGuarded
   -> EffectFn1 Params (Promise String)
 mkAppScriptHandlerGuarded apiSpec api = mkEffectFn1 \p@(Params params) -> do
   let cfg = { logger: { log: Console.log, logDebug: Console.log, logError: Console.log } }
-  case mkRouter apiSpec api of
+  case mkRouter (const $ pure "") apiSpec api of
     Right routerTrie -> do
       fromAff do 
         runHandlers cfg routerTrie { method: "GET", path: pure params.pathInfo, query: params.parameters } p >>= case _ of

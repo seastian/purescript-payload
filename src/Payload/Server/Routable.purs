@@ -22,8 +22,8 @@ import Effect.Console (errorShow)
 import Payload.Internal.Route (DefaultParentRoute, DefaultServerRouteSpec)
 import Payload.Internal.UrlParsing (class ParseUrl, class ToSegments, Segment(..))
 import Payload.Internal.UrlParsing as UrlParsing
-import Payload.ResponseTypes (RawResponse, ResponseBody(..), Result)
 import Payload.ResponseTypes (Failure(..)) as Resp
+import Payload.ResponseTypes (RawResponse, ResponseBody(..), Result)
 import Payload.Server.Handleable (class Handleable, MethodHandler, handle)
 import Payload.Server.Internal.GuardParsing (GuardTypes(GuardTypes))
 import Payload.Server.Internal.GuardParsing as GuardParsing
@@ -31,6 +31,7 @@ import Payload.Server.Internal.Request (RequestUrl)
 import Payload.Server.Internal.Trie (Trie)
 import Payload.Server.Internal.Trie as Trie
 import Payload.Server.Internal.Url as PayloadUrl
+import Payload.Server.ReadBody (ReadBody)
 import Payload.Server.Response (internalError, setBody) as Resp
 import Payload.Spec (GuardList, Spec, Guards(Guards), Route(Route), Routes)
 import Prim.Row as Row
@@ -55,7 +56,8 @@ data Outcome = Success RawResponse | Failure RawResponse | Forward String
 class Routable routesSpec guardsSpec handlers guards r |
   routesSpec guardsSpec -> handlers,
   guardsSpec -> guards where
-  mkRouter :: Spec { routes :: routesSpec, guards :: guardsSpec }
+  mkRouter :: ReadBody r
+              -> Spec { routes :: routesSpec, guards :: guardsSpec }
               -> { handlers :: handlers, guards :: guards }
               -> Either String (RoutingTrie r)
 
@@ -87,8 +89,8 @@ instance routableRootRecord ::
          handlers
          guards
          r where
-  mkRouter _ { handlers, guards } =
-    mkRouterList
+  mkRouter readBody _ { handlers, guards } =
+    mkRouterList readBody
       (Proxy :: _ childRoutesList)
       (Proxy :: _ "")
       (Proxy :: _ (Record rootParams))
@@ -110,7 +112,8 @@ class RoutableList
       | routesSpecList guardsSpec -> handlers
       , guardsSpec -> guards where
   mkRouterList ::
-    Proxy routesSpecList
+    ReadBody r
+    -> Proxy routesSpecList
     -> Proxy basePath
     -> Proxy (Record baseParams)
     -> Guards baseGuards
@@ -121,7 +124,7 @@ class RoutableList
     -> Either String (RoutingTrie r)
 
 instance routableListNil :: RoutableList RL.Nil basePath baseParams baseGuards guardsSpec handlers guards r where
-  mkRouterList _ _ _ _ _ _ _ trie = Right trie
+  mkRouterList _ _ _ _ _ _ _ _ trie = Right trie
 
 instance routableListCons ::
   ( IsSymbol routeName
@@ -145,9 +148,10 @@ instance routableListCons ::
                     (Record guards)
                     r
                     where
-  mkRouterList _ basePath baseParams baseGuards guardsSpec handlers guards trie = do
+  mkRouterList readBody _ basePath baseParams baseGuards guardsSpec handlers guards trie = do
     newTrie <- insertRoute (Lit method : routePath) handler trie
-    trieWithRest <- mkRouterList (Proxy :: Proxy remRoutes)
+    trieWithRest <- mkRouterList readBody
+          (Proxy :: Proxy remRoutes)
           basePath
           baseParams
           baseGuards
@@ -177,7 +181,7 @@ instance routableListCons ::
         # executeHandler
       
       methodHandler :: MethodHandler r
-      methodHandler = handle
+      methodHandler = handle readBody
                       (Proxy :: _ basePath)
                       baseParams
                       baseGuards
@@ -239,9 +243,10 @@ instance routableListConsRoutes ::
                     (Record handlers)
                     (Record guards)
                     r where
-  mkRouterList _ basePath baseParams baseGuards guardsSpec handlers guards trie =
+  mkRouterList readBody _ basePath baseParams baseGuards guardsSpec handlers guards trie =
     case trieWithChildRoutes of
-      Right newTrie -> mkRouterList (Proxy :: Proxy remRoutes)
+      Right newTrie -> mkRouterList readBody
+                      (Proxy :: Proxy remRoutes)
                       basePath
                       baseParams
                       baseGuards
@@ -255,6 +260,7 @@ instance routableListConsRoutes ::
     where
       childHandlers = Record.get (Proxy :: _ parentName) handlers
       trieWithChildRoutes = mkRouterList
+                            readBody
                             (Proxy :: _ childRoutesList)
                             (Proxy :: _ childBasePath)
                             (Proxy :: _ (Record childParams))

@@ -14,6 +14,9 @@ module Payload.Server
 
 import Prelude
 
+import Node.HTTP.IncomingMessage (toReadable)
+import Node.Stream.Aff (readAll, toStringUTF8)
+import Payload.HTTP (HTTPRequest)
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.List (List)
@@ -131,7 +134,7 @@ startGuarded
   -> Aff (Either String Server)
 startGuarded opts apiSpec api = do
   let cfg = mkConfig opts
-  case mkRouter apiSpec api of
+  case mkRouter readBody apiSpec api of
     Right routerTrie -> do
       server <- liftEffect HTTP.createServer
       void $ liftEffect (server # on requestH \req res -> do
@@ -144,6 +147,7 @@ startGuarded opts apiSpec api = do
   where
   hostname = "http://" <> opts.host <> ":" <> show opts.port
   startedMsg = "Server is running on " <> hostname
+  readBody req = toStringUTF8 =<< readAll (toReadable req)
 
 dumpRoutes :: forall r. Trie (HandlerEntry r) -> Effect Unit
 dumpRoutes = log <<< showRoutes
