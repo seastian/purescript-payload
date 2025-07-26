@@ -9,6 +9,7 @@
     "example:github": "nodemon -w output --exec \"node -e 'import(\\\"./output/Payload.Examples.ClientGitHub.Main/index.js\\\").then(m => m.main())'\"",
     "publish:version": "spago bump-version",
     "publish:push": "pulp publish",
+    "appscript:bundle": "esbuild --outfile=dist/appscript.js --bundle output/Payload.Examples.AppScript.Main/index.js --keep-names --format=cjs --banner:js=\"var module = {};\"",
     "test": "spago test --watch --main Payload.Test.Main"
   },
   "devDependencies": {
