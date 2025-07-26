@@ -123,56 +123,59 @@ updateHeaders f (Response res) = Response (res { headers = f res.headers })
 -- | can either return that type directly or return another type from
 -- | which that type can be produced (e.g. a full response with different
 -- | headers or a different status code).
-class ToSpecResponse (docRoute :: Symbol) a b where
-  toSpecResponse :: Proxy docRoute -> a -> Result (Response b)
+class ToSpecResponse (docRoute :: Symbol) a b m where
+  toSpecResponse :: Proxy docRoute -> a -> Result (Response b) m
 
 instance toSpecResponseEitherFailureVal
-  :: EncodeResponse a
-  => ToSpecResponse docRoute (Either Failure a) a where
+  :: (EncodeResponse a m, Monad m)
+  => ToSpecResponse docRoute (Either Failure a) a m where
   toSpecResponse _ (Left err) = throwError err
   toSpecResponse _ (Right res) = pure (ok res)
 else instance toSpecResponseEitherFailureResponse
-  :: EncodeResponse a
-  => ToSpecResponse docRoute (Either Failure (Response a)) a where
+  :: (EncodeResponse a m, Monad m)
+  => ToSpecResponse docRoute (Either Failure (Response a)) a m where
   toSpecResponse _ (Left err) = throwError err
   toSpecResponse _ (Right res) = pure res
 else instance toSpecResponseEitherResponseVal
-  :: EncodeResponse err
-  => ToSpecResponse docRoute (Either (Response err) a) a where
+  :: (EncodeResponse err m, Monad m)
+  => ToSpecResponse docRoute (Either (Response err) a) a m where
   toSpecResponse _ (Left res) = do
     raw <- encodeResponse res
     throwError (Error raw) 
   toSpecResponse _ (Right res) = pure (ok res)
 else instance toSpecResponseEitherResponseResponse
-  :: EncodeResponse err
-  => ToSpecResponse docRoute (Either (Response err) (Response a)) a where
+  :: (EncodeResponse err m, Monad m)
+  => ToSpecResponse docRoute (Either (Response err) (Response a)) a m where
   toSpecResponse _ (Left res) = do
     raw <- encodeResponse res
     throwError (Error raw) 
   toSpecResponse _ (Right res) = pure res
 else instance toSpecResponseEitherValVal ::
-  ( EncodeResponse a
-  , EncodeResponse err
-  ) => ToSpecResponse docRoute (Either err a) a where
+  ( EncodeResponse a m
+  , EncodeResponse err m
+  , Monad m
+  ) => ToSpecResponse docRoute (Either err a) a m where
   toSpecResponse _ (Left res) = do
     raw <- encodeResponse (internalError res)
     throwError (Error raw) 
   toSpecResponse _ (Right res) = pure (ok res)
 else instance toSpecResponseEitherValResponse ::
-  ( EncodeResponse a
-  , EncodeResponse err
-  ) => ToSpecResponse docRoute (Either err (Response a)) a where
+  ( EncodeResponse a m
+  , EncodeResponse err m
+  , Monad m
+  ) => ToSpecResponse docRoute (Either err (Response a)) a m where
   toSpecResponse _ (Left res) = do
     raw <- encodeResponse (internalError res)
     throwError (Error raw) 
   toSpecResponse _ (Right res) = pure res
 else instance toSpecResponseResponse
-  :: EncodeResponse a
-  => ToSpecResponse docRoute (Response a) a where
+  :: (EncodeResponse a m
+  , Monad m)
+  => ToSpecResponse docRoute (Response a) a m where
   toSpecResponse _ res = pure res
 else instance toSpecResponseIdentity
-  :: EncodeResponse a
-  => ToSpecResponse docRoute a a where
+  :: (EncodeResponse a m, Monad m)
+  => ToSpecResponse docRoute a a m where
   toSpecResponse _ res = pure (ok res)
 else instance toSpecResponseFail ::
   ( Fail (Text "Could not match or convert handler response type to spec response type."
@@ -188,48 +191,48 @@ else instance toSpecResponseFail ::
           |> Text "               " <> Quote b
           |> Text ""
          )
-  ) => ToSpecResponse docRoute a b where
+  , Monad m) => ToSpecResponse docRoute a b m where
   toSpecResponse res = unsafeCoerce res
 
 -- | Any types that can appear in a server response body and show up in the API
 -- | spec under the "body" field must implement EncodeResponse. This is also
 -- | a good place to add a Content-Type header for the encoded response.
-class EncodeResponse r where
-  encodeResponse :: Response r -> Result RawResponse
+class EncodeResponse r m where
+  encodeResponse :: Response r -> Result RawResponse m
 
-instance encodeResponseResponseBody :: EncodeResponse ResponseBody where
+instance encodeResponseResponseBody :: Monad m => EncodeResponse ResponseBody m where
   encodeResponse = pure
 else instance encodeResponseRecord ::
-  ( SimpleJson.WriteForeign (Record r)
-  ) => EncodeResponse (Record r) where
+  ( SimpleJson.WriteForeign (Record r), Monad m
+  ) => EncodeResponse (Record r) m where
   encodeResponse (Response r) = encodeResponse (Response $ r { body = Json r.body })
 else instance encodeResponseArray ::
-  ( SimpleJson.WriteForeign (Array r)
-  ) => EncodeResponse (Array r) where
+  ( SimpleJson.WriteForeign (Array r), Monad m
+  ) => EncodeResponse (Array r) m where
   encodeResponse (Response r) = encodeResponse (Response $ r { body = Json r.body })
 else instance encodeResponseJson ::
-  ( SimpleJson.WriteForeign r
-  ) => EncodeResponse (Json r) where
+  ( SimpleJson.WriteForeign r, Monad m
+  ) => EncodeResponse (Json r) m where
   encodeResponse (Response r@{ body: Json json }) = pure $ Response $
         { status: r.status
         , headers: Headers.setIfNotDefined "content-type" ContentType.json r.headers
         , body: StringBody (SimpleJson.writeJSON json) }
-else instance encodeResponseString :: EncodeResponse String where
+else instance encodeResponseString :: Monad m => EncodeResponse String m where
   encodeResponse (Response r) = pure $ Response
                    { status: r.status
                    , headers: Headers.setIfNotDefined "content-type" ContentType.plain r.headers
                    , body: StringBody r.body }
-else instance encodeResponseReadableStream :: EncodeResponse (ReadableStream Uint8Array) where
+else instance encodeResponseReadableStream :: Monad m => EncodeResponse (ReadableStream Uint8Array) m where
   encodeResponse (Response r) = pure $ Response
                    { status: r.status
                    , headers: Headers.setIfNotDefined "content-type" ContentType.plain r.headers
                    , body: StreamBody (readableStreamToNodeReadable r.body) }
-else instance encodeResponseStream :: EncodeResponse (Stream r) where
+else instance encodeResponseStream :: Monad m => EncodeResponse (Stream r) m where
   encodeResponse (Response r) = pure $ Response
                    { status: r.status
                    , headers: Headers.setIfNotDefined "content-type" ContentType.plain r.headers
                    , body: StreamBody (unsafeCoerce r.body) }
-else instance encodeResponseMaybe :: EncodeResponse a => EncodeResponse (Maybe a) where
+else instance encodeResponseMaybe :: (Monad m, EncodeResponse a m) => EncodeResponse (Maybe a) m where
   encodeResponse (Response { body: Nothing }) = pure $ Response
                    { status: Status.notFound
                    , headers: Headers.empty
@@ -238,7 +241,7 @@ else instance encodeResponseMaybe :: EncodeResponse a => EncodeResponse (Maybe a
                    { status: r.status
                    , headers: r.headers
                    , body }
-else instance encodeResponseEmpty :: EncodeResponse Empty where
+else instance encodeResponseEmpty :: Monad m => EncodeResponse Empty m where
   encodeResponse (Response r) = pure $ Response
                    { status: r.status
                    , headers: r.headers

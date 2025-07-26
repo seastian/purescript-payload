@@ -31,10 +31,10 @@ _status res = Right $ (unwrap res).status.code
 _body :: RawResponse -> Either String ResponseBody
 _body res = Right $ (unwrap res).body
 
-encodeOk :: forall a. EncodeResponse a => a -> Aff (Either String RawResponse)
+encodeOk :: forall a. EncodeResponse a Aff => a -> Aff (Either String RawResponse)
 encodeOk = (map $ lmap show) <<< runExceptT <<< encodeResponse <<< Response.ok
 
-encode :: forall a. EncodeResponse a => Response a -> Aff (Either String RawResponse)
+encode :: forall a. EncodeResponse a Aff => Response a -> Aff (Either String RawResponse)
 encode = (map $ lmap show) <<< runExceptT <<< encodeResponse
 
 tests :: TestSuite

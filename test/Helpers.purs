@@ -30,7 +30,7 @@ import Test.Unit.Assert as Assert
 
 withServer
   :: forall routesSpec guardsSpec handlers guards
-   . Routable routesSpec guardsSpec handlers guards HTTPRequest
+   . Routable routesSpec guardsSpec handlers guards HTTPRequest Aff
   => Spec { routes :: routesSpec, guards :: guardsSpec }
   -> { handlers :: handlers, guards :: guards }
   -> Aff Unit
@@ -57,7 +57,7 @@ whileServerRuns runServer doWhileRunning = do
                                  Aff.delay (Aff.Milliseconds 10.0)
 
 withRoutes :: forall routesSpec handlers
-  . Routable routesSpec {} handlers {} HTTPRequest
+  . Routable routesSpec {} handlers {} HTTPRequest Aff
   => Spec routesSpec
   -> handlers
   -> Aff Unit

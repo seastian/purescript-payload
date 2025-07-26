@@ -88,7 +88,7 @@ newtype Server = Server HTTP.Types.HttpServer
 -- | Start server with default options, ignoring unexpected startup errors.
 launch
   :: forall routesSpec handlers
-   . Routable routesSpec {} handlers {} HTTPRequest
+   . Routable routesSpec {} handlers {} HTTPRequest Aff
   => Spec routesSpec
   -> handlers
   -> Effect Unit
@@ -97,7 +97,7 @@ launch routeSpec handlers = Aff.launchAff_ (Aff.apathize $ start_ routeSpec hand
 -- | Start server with default options and given route spec and handlers (no guards).
 start_
   :: forall routesSpec handlers
-   . Routable routesSpec {} handlers {} HTTPRequest
+   . Routable routesSpec {} handlers {} HTTPRequest Aff
   => Spec routesSpec
   -> handlers
   -> Aff (Either String Server)
@@ -106,7 +106,7 @@ start_ = start defaultOpts
 -- | Start server with given routes and handlers (no guards).
 start
   :: forall routesSpec handlers
-   . Routable routesSpec {} handlers {} HTTPRequest
+   . Routable routesSpec {} handlers {} HTTPRequest Aff
   => Options
   -> Spec routesSpec
   -> handlers
@@ -118,7 +118,7 @@ start opts _ handlers = startGuarded opts api { handlers, guards: {} }
 -- | Start server with default options and given spec, handlers, and guards.
 startGuarded_
   :: forall routesSpec guardsSpec handlers guards
-   . Routable routesSpec guardsSpec handlers guards HTTPRequest
+   . Routable routesSpec guardsSpec handlers guards HTTPRequest Aff
   => Spec { routes :: routesSpec, guards :: guardsSpec }
   -> { handlers :: handlers, guards :: guards }
   -> Aff (Either String Server)
@@ -127,7 +127,7 @@ startGuarded_ = startGuarded defaultOpts
 -- | Start server with given spec, handlers, and guards.
 startGuarded
   :: forall routesSpec guardsSpec handlers guards
-   . Routable routesSpec guardsSpec handlers guards HTTPRequest
+   . Routable routesSpec guardsSpec handlers guards HTTPRequest Aff
   => Options
   -> Spec { guards :: guardsSpec, routes :: routesSpec }
   -> { handlers :: handlers, guards :: guards }
@@ -138,10 +138,10 @@ startGuarded opts apiSpec api = do
     Right routerTrie -> do
       server <- liftEffect HTTP.createServer
       void $ liftEffect (server # on requestH \req res -> do
-        handleRequest hostname cfg routerTrie req res)
+        Aff.launchAff_ $ handleRequest hostname cfg routerTrie req res)
       let httpOpts = Record.delete (Proxy :: Proxy "logLevel") $ Record.delete (Proxy :: Proxy "backlog") opts
       liftEffect $ listenTcp (toNetServer server) httpOpts
-      liftEffect $ cfg.logger.log startedMsg
+      cfg.logger.log startedMsg
       pure $ pure $ Server server
     Left err -> pure (Left err)
   where
@@ -149,43 +149,43 @@ startGuarded opts apiSpec api = do
   startedMsg = "Server is running on " <> hostname
   readBody req = toStringUTF8 =<< readAll (toReadable req)
 
-dumpRoutes :: forall r. Trie (HandlerEntry r) -> Effect Unit
+dumpRoutes :: forall r m. Trie (HandlerEntry r m) -> Effect Unit
 dumpRoutes = log <<< showRoutes
 
-showRoutes :: forall r. Trie (HandlerEntry r)-> String
+showRoutes :: forall r m. Trie (HandlerEntry r m)-> String
 showRoutes routerTrie = Trie.dumpEntries (_.route <$> routerTrie)
 
-mkConfig :: Options -> Config
+mkConfig :: Options -> Config Aff
 mkConfig { logLevel } = { logger: mkLogger logLevel }
 
-mkLogger :: LogLevel -> Logger
+mkLogger :: LogLevel -> Logger Aff
 mkLogger logLevel = { log: log_, logDebug, logError }
   where
-    log_ :: String -> Effect Unit
-    log_ | logLevel >= LogNormal = log
+    log_ :: String -> Aff Unit
+    log_ | logLevel >= LogNormal = log >>> liftEffect
     log_ = const $ pure unit
 
-    logDebug :: String -> Effect Unit
-    logDebug | logLevel >= LogDebug = log
+    logDebug :: String -> Aff Unit
+    logDebug | logLevel >= LogDebug = log >>> liftEffect
     logDebug = const $ pure unit
 
-    logError :: String -> Effect Unit
-    logError | logLevel >= LogError = log
+    logError :: String -> Aff Unit
+    logError | logLevel >= LogError = log >>> liftEffect
     logError = const $ pure unit
 
-handleRequest :: String -> Config -> Trie (HandlerEntry HTTPRequest) -> HTTPRequest -> HTTPResponse -> Effect Unit
+handleRequest :: String -> Config Aff -> Trie (HandlerEntry HTTPRequest Aff) -> HTTPRequest -> HTTPResponse -> Aff Unit
 handleRequest hostname cfg@{ logger } routerTrie req res = do
   let url = HTTP.IncomingMessage.url req
   logger.logDebug (HTTP.IncomingMessage.method req <> " " <> url)
-  requestUrl hostname req >>= case _ of
-    Right reqUrl -> Aff.launchAff_ $ runHandlers cfg routerTrie reqUrl req >>= case _ of
+  liftEffect (requestUrl hostname req) >>= case _ of
+    Right reqUrl -> runHandlers cfg routerTrie reqUrl req >>= case _ of
         Success r -> liftEffect $ sendResponse res r
         Failure r -> liftEffect $ sendResponse res r
         Forward _ -> liftEffect $ writeResponse res (Response.notFound (StringBody ""))
     Left err -> do
-      writeResponse res (internalError $ StringBody $ "Path could not be decoded: " <> show err)
+      liftEffect $ writeResponse res (internalError $ StringBody $ "Path could not be decoded: " <> show err)
 
-showMatches :: forall r. List (HandlerEntry r) -> String
+showMatches :: forall r m. List (HandlerEntry r m) -> String
 showMatches matches = "    " <> String.joinWith "\n    " (Array.fromFoldable $ showMatch <$> matches)
   where
     showMatch = showRouteUrl <<< _.route

@@ -59,5 +59,5 @@ instance showResponseBody :: Show ResponseBody where
   show (StreamBody _) = "StreamBody"
 
 -- | Internally handlers and guards all de-sugar into this type.
-type Result a = ExceptT Failure Aff a
+type Result a m = ExceptT Failure m a
 

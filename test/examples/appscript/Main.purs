@@ -2,8 +2,7 @@ module Payload.Examples.AppScript.Main where
 
 import Prelude
 
-import Control.Promise (Promise)
-import Effect.Aff (Aff)
+import Effect (Effect)
 import Effect.Uncurried (EffectFn1)
 import Payload.AppScript (Params, mkAppScriptHandler)
 import Payload.Spec (Spec(Spec), GET)
@@ -21,7 +20,7 @@ spec :: Spec {
 }
 spec = Spec
 
-getMessages :: { params :: { id :: Int }, query :: { limit :: Int } } -> Aff (Array Message)
+getMessages :: { params :: { id :: Int }, query :: { limit :: Int } } -> Effect (Array Message)
 getMessages {params: {id}, query: {limit}} = pure
   [{ id: 1, text: "Hey " <> show id}, { id: 2, text: "Limit " <> show limit }]
 
@@ -29,11 +28,11 @@ handlers ::
     { getMessages ::
         { params :: { id :: Int }
         , query :: { limit :: Int }
-        } -> Aff (Array { id :: Int, text :: String })
+        } -> Effect (Array { id :: Int, text :: String })
     }
 handlers = { getMessages }
 
-doGet :: EffectFn1 Params (Promise String)
+doGet :: EffectFn1 Params String
 doGet = handler
   where
   handler = mkAppScriptHandler spec handlers
