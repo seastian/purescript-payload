@@ -4,7 +4,7 @@ import Prelude
 
 import Data.Either (Either(..))
 import Data.List (fromFoldable)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, maybe)
 import Data.Nullable (Nullable, toMaybe)
 import Data.String.Common (split)
 import Data.String.Pattern (Pattern(..))
@@ -21,6 +21,7 @@ newtype Params = Params
   { parameters :: Object (Array String)
   , pathInfo :: Nullable String
   , contentLength :: Int
+  , postData :: Nullable { contents :: String }
   }
 
 foreign import appScriptJson :: String -> String
@@ -45,7 +46,8 @@ mkAppScriptHandlerGuarded apiSpec api = mkEffectFn1 \p@(Params params) -> do
   let path = fromFoldable $ split (Pattern "/") $ fromMaybe "" $ toMaybe params.pathInfo
   let cfg = { logger: { log: Console.log, logDebug: Console.log, logError: Console.log } }
   let method = if params.contentLength == -1 then "GET" else "POST"
-  case mkRouter (const $ pure "") apiSpec api of
+  let readBody _ = pure $ maybe "" _.contents $ toMaybe params.postData
+  case mkRouter readBody apiSpec api of
     Right routerTrie -> do
         runHandlers cfg routerTrie { method, path, query: params.parameters } p >>= case _ of
             Success (Response { body: StringBody b }) -> pure $ appScriptJson b
