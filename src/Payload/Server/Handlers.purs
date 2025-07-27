@@ -11,6 +11,7 @@ import Data.Either (Either(..))
 import Data.Foldable (class Foldable)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Newtype (wrap)
 import Data.String as String
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
@@ -19,10 +20,11 @@ import Effect.Class (liftEffect)
 import Node.FS.Aff as FsAff
 import Node.FS.Stats as Stats
 import Node.FS.Stream (createReadStream)
-import Node.Stream (Read, Stream)
+import Node.Stream (Read)
 import Payload.Headers as Headers
 import Payload.ResponseTypes (Failure(..), Response(..), ResponseBody(..))
 import Payload.Server.Internal.MimeTypes as MimeTypes
+import Payload.Server.Node.Stream (Stream)
 import Payload.Server.Path as Path
 import Payload.Server.Response as Response
 import Payload.Server.Status as Status
@@ -44,7 +46,7 @@ file path = do
         [ Tuple "Content-Type" mimeType
         , Tuple "Content-Length" (show (fileSize stat))
         ]
-        , body: fileStream }
+        , body: wrap fileStream }
     _ -> pure (Left notFoundError)
 
 fileSize :: Stats.Stats -> Int

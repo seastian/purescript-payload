@@ -6,6 +6,8 @@ import Control.Monad.Except (ExceptT)
 import Data.Newtype (class Newtype)
 import Effect.Aff (Aff)
 import Payload.Headers (Headers)
+import Data.ArrayBuffer.Types (Uint8Array)
+import Web.Streams.ReadableStream (ReadableStream)
 
 -- | The type of a server response, before encoding the body.
 -- | Responses with modified statuses or headers can be created
@@ -44,7 +46,7 @@ instance showFailure :: Show Failure where
 type RawResponse = Response ResponseBody
 
 -- | The base types of body responses that can be returned.
-data ResponseBody = StringBody String | StreamBody UnsafeStream | EmptyBody
+data ResponseBody = StringBody String | StreamBody UnsafeStream | StreamBodyWeb (ReadableStream Uint8Array) | EmptyBody
 
 data UnsafeStream
 
@@ -57,6 +59,7 @@ instance showResponseBody :: Show ResponseBody where
   show (StringBody s) = s
   show EmptyBody = "EmptyBody"
   show (StreamBody _) = "StreamBody"
+  show (StreamBodyWeb _) = "StreamBodyWeb"
 
 -- | Internally handlers and guards all de-sugar into this type.
 type Result a m = ExceptT Failure m a

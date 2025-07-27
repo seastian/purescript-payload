@@ -2,24 +2,19 @@ module Payload.Client.DecodeResponse where
 
 import Prelude
 
-import Data.ArrayBuffer.Types (ArrayBuffer, Uint8Array)
+import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Bifunctor (lmap)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
-import Effect.Class (liftEffect)
-import Effect.Class.Console (log)
 import Foreign (MultipleErrors)
-import Node.Stream (Read, Stream)
-import Node.Stream as Stream
 import Payload.Client.Fetch (FetchResponse)
 import Payload.Client.Fetch as Fetch
 import Payload.ResponseTypes (ResponseBody(..))
+import Payload.Server.Node.Stream (Stream)
 import Payload.TypeErrors (type (<>), type (|>))
 import Prim.TypeError (class Warn, Quote, Text)
 import Simple.JSON as SimpleJson
-import Type.Equality (class TypeEquals)
-import Unsafe.Coerce (unsafeCoerce)
 import Web.Streams.ReadableStream (ReadableStream)
 
 data DecodeResponseError
@@ -46,6 +41,7 @@ unexpectedError expected body = Left (InternalDecodeError { message })
     received = case body of
       StringBody s -> "(StringBody '" <> s <> "')"
       StreamBody _ -> "StreamBody"
+      StreamBodyWeb _ -> "StreamBodyWeb"
       EmptyBody -> "EmptyBody"
     message = "Invalid response type, expected '" <> expected <> "' but received '" <> received <> "'." <>
       "This is probably a bug in the library."

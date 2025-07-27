@@ -2,6 +2,8 @@ module Payload.Server.Internal.ServerResponse where
 
 import Prelude
 
+import Data.ArrayBuffer.Types (Uint8Array)
+import Web.Streams.ReadableStream (ReadableStream)
 import Data.Either (Either(..))
 import Data.Traversable (sequence_)
 import Data.Tuple (Tuple(..))
@@ -48,11 +50,16 @@ writeBodyAndHeaders res headers (StringBody str) = do
 writeBodyAndHeaders res headers (StreamBody stream) = do
   writeHeaders res headers
   writeStreamBody res stream
+writeBodyAndHeaders res headers (StreamBodyWeb stream) = do
+  writeHeaders res headers
+  writeStreamBody res $ readableStreamToNodeReadable stream
 writeBodyAndHeaders res headers EmptyBody = do
   writeHeaders res headers
   Aff.launchAff_ $ endResponse res
 
 foreign import endResponse_ :: HTTPResponse -> Unit -> (Unit -> Effect Unit) -> Effect Unit
+
+foreign import readableStreamToNodeReadable :: ReadableStream Uint8Array -> UnsafeStream
 
 endResponse :: HTTPResponse -> Aff Unit
 endResponse res = Aff.makeAff \cb -> do

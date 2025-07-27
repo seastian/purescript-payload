@@ -83,11 +83,10 @@ import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (over)
-import Node.Stream (Stream)
 import Payload.ContentType as ContentType
 import Payload.Headers (Headers)
 import Payload.Headers as Headers
-import Payload.ResponseTypes (Empty, Failure(..), HttpStatus, Json(..), RawResponse, Response(..), ResponseBody(..), Result, UnsafeStream)
+import Payload.ResponseTypes (Empty, Failure(..), HttpStatus, Json(..), RawResponse, Response(..), ResponseBody(..), Result)
 import Payload.Server.Status as Status
 import Payload.TypeErrors (type (<>), type (|>))
 import Prim.TypeError (class Fail, Quote, Text)
@@ -226,12 +225,7 @@ else instance encodeResponseReadableStream :: Monad m => EncodeResponse (Readabl
   encodeResponse (Response r) = pure $ Response
                    { status: r.status
                    , headers: Headers.setIfNotDefined "content-type" ContentType.plain r.headers
-                   , body: StreamBody (readableStreamToNodeReadable r.body) }
-else instance encodeResponseStream :: Monad m => EncodeResponse (Stream r) m where
-  encodeResponse (Response r) = pure $ Response
-                   { status: r.status
-                   , headers: Headers.setIfNotDefined "content-type" ContentType.plain r.headers
-                   , body: StreamBody (unsafeCoerce r.body) }
+                   , body: StreamBodyWeb r.body }
 else instance encodeResponseMaybe :: (Monad m, EncodeResponse a m) => EncodeResponse (Maybe a) m where
   encodeResponse (Response { body: Nothing }) = pure $ Response
                    { status: Status.notFound
@@ -486,5 +480,3 @@ notExtended = status Status.notExtended
 -- | Status code: 511
 networkAuthenticationRequired :: forall a. a -> Response a
 networkAuthenticationRequired = status Status.networkAuthenticationRequired
-
-foreign import readableStreamToNodeReadable :: ReadableStream Uint8Array -> UnsafeStream

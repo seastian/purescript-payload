@@ -2,8 +2,9 @@ module Payload.Examples.Basic.Spec where
 
 import Data.List (List)
 import Foreign.Object (Object)
-import Node.Stream (Read, Stream)
+import Node.Stream (Read)
 import Payload.HTTP (HTTPRequest)
+import Payload.Server.Node.Stream (Stream)
 import Payload.Spec (type (:), Spec(Spec), GET, Guards, Nil, POST, Routes)
 
 spec :: Spec {

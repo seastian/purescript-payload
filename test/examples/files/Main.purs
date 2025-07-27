@@ -3,9 +3,10 @@ module Payload.Examples.Files.Main where
 import Data.Either (Either)
 import Data.List (List)
 import Effect.Aff (Aff)
-import Node.Stream (Read, Stream)
-import Payload.ResponseTypes (Failure, Response(..))
+import Node.Stream (Read)
+import Payload.ResponseTypes (Failure, Response)
 import Payload.Server.Handlers as Handlers
+import Payload.Server.Node.Stream (Stream)
 import Payload.Spec (Spec(Spec), GET)
 
 spec :: Spec
