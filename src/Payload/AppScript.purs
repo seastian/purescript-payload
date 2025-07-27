@@ -20,6 +20,7 @@ import Payload.Spec (Spec(..))
 newtype Params = Params
   { parameters :: Object (Array String)
   , pathInfo :: Nullable String
+  , contentLength :: Int
   }
 
 foreign import appScriptJson :: String -> String
@@ -43,9 +44,10 @@ mkAppScriptHandlerGuarded
 mkAppScriptHandlerGuarded apiSpec api = mkEffectFn1 \p@(Params params) -> do
   let path = fromFoldable $ split (Pattern "/") $ fromMaybe "" $ toMaybe params.pathInfo
   let cfg = { logger: { log: Console.log, logDebug: Console.log, logError: Console.log } }
+  let method = if params.contentLength == -1 then "GET" else "POST"
   case mkRouter (const $ pure "") apiSpec api of
     Right routerTrie -> do
-        runHandlers cfg routerTrie { method: "GET", path, query: params.parameters } p >>= case _ of
+        runHandlers cfg routerTrie { method, path, query: params.parameters } p >>= case _ of
             Success (Response { body: StringBody b }) -> pure $ appScriptJson b
             _ -> pure $ appScriptJson "ERROR"
     Left err -> pure $ appScriptJson $ "Router error: " <> show err
